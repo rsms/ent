@@ -49,7 +49,7 @@ func parseopts() []string {
 
 	// parse cli args
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [options] <srcdir> ...\noptions:\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s [options] [<srcdir> ...]\noptions:\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.BoolVar(&opt_help, "h, -help", false, "Show help and exit")
@@ -105,8 +105,8 @@ func parseopts() []string {
 	}
 	args := flag.Args()
 	if len(args) == 0 {
-		fmt.Fprintf(os.Stderr, "%s: missing <srcdir>\n", os.Args[0])
-		showUsageAndExit(1)
+		// default to "." if no <srcdir> is given
+		args = append(args, ".")
 	}
 	if len(args) > 1 && opt_outfile != "-" && filepath.IsAbs(opt_outfile) {
 		fmt.Fprintf(os.Stderr,
