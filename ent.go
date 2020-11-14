@@ -2,9 +2,6 @@ package ent
 
 import (
 	"errors"
-	"fmt"
-	"reflect"
-	"sync"
 	"unsafe"
 )
 
@@ -17,12 +14,15 @@ type Ent interface {
 	EntNew() Ent
 	EntEncode(c Encoder, fieldmap uint64)
 	EntDecode(c Decoder) (id, version uint64)
-	EntDecodeIndexed(c Decoder, fields uint64) (version uint64)
+	EntDecodePartial(c Decoder, fields uint64) (version uint64)
 	EntIndexes() []EntIndex
+	EntFields() Fields
 
 	entUnsafePtr() unsafe.Pointer // pointer to EntBase (and thus header of Ent)
 }
 
+// EntBase is the foundation for all ent types.
+// Use it as the first embedded field in a struct to make the struct an ent.
 type EntBase struct {
 	id      uint64
 	version uint64
@@ -33,10 +33,11 @@ type EntBase struct {
 	fieldmap uint64
 }
 
-const (
-	fieldmapAll  = uint64(0xFFFFFFFFFFFFFFFF)
-	fieldmapNone = uint64(0)
-)
+// Fields describes fields of an ent. Available via TYPE.EntFields()
+type Fields struct {
+	Names    []string // names of fields, ordered by field index
+	Fieldmap uint64   // a bitmap with all fields set
+}
 
 var (
 	ErrNoStorage       = errors.New("no ent storage")
@@ -86,6 +87,7 @@ func (e *EntBase) EntIsFieldChanged(fieldIndex int) bool {
 }
 
 func (e *EntBase) EntIndexes() []EntIndex { return nil }
+func (e *EntBase) EntFields() Fields      { return Fields{} }
 
 // SetFieldChanged marks the field fieldIndex as "having unsaved changes"
 func SetFieldChanged(e *EntBase, fieldIndex int) { e.fieldmap |= (1 << fieldIndex) }
@@ -101,72 +103,25 @@ func IsFieldChanged(e *EntBase, fieldIndex int) bool {
 // JsonEncode encodes the ent as JSON
 func JsonEncode(e Ent) ([]byte, error) {
 	// Note: Used by generated code to implement MarshalJSON
-	return jsonEncodeEnt(e, e.Id(), e.Version(), fieldmapAll)
+	return JsonEncodeEnt(e, e.Id(), e.Version(), e.EntFields().Fieldmap)
 }
 
 // JsonEncodeUnsaved encodes the ent as JSON, only including fields with unsaved changes
 func JsonEncodeUnsaved(e Ent) ([]byte, error) {
 	eb := entBase(e)
-	return jsonEncodeEnt(e, e.Id(), e.Version(), eb.fieldmap)
+	return JsonEncodeEnt(e, e.Id(), e.Version(), eb.fieldmap)
 }
 
 // JsonEncode encodes the ent as JSON
 func JsonDecode(e Ent, data []byte) error {
 	// Note: Used by generated code to implement UnmarshalJSON
-	id, version, err := jsonDecodeEnt(e, data)
+	id, version, err := JsonDecodeEnt(e, data)
 	if err == nil {
 		eb := entBase(e)
 		eb.id = id
 		eb.version = version
 	}
 	return err
-}
-
-// —————————————————————————————————————————————————————————
-// registry
-// All ents are expected to call Register during program initialization, either through
-// an empty var assignment or init() function. e.g. var _ = ent.Register(&MyEnt{})
-// Register is concurrency safe and can be called from any goroutine at any time.
-
-type EntType struct {
-	Name string // == EntTypeName()
-	Type reflect.Type
-}
-
-var (
-	entRegMapMu sync.RWMutex
-	entRegMap   = map[string]*EntType{}
-
-	entBaseType = reflect.TypeOf(EntBase{})
-)
-
-func Register(e Ent) *EntType {
-	et := &EntType{
-		Name: e.EntTypeName(),
-		Type: reflect.TypeOf(e),
-	}
-	entRegMapMu.Lock()
-	defer entRegMapMu.Unlock()
-	if existingEntType := entRegMap[et.Name]; existingEntType != nil {
-		if et.Type == existingEntType.Type {
-			// ignore duplicate call to Register
-			return existingEntType
-		}
-		panic(fmt.Sprintf("duplicate ent type name %q", et.Name))
-	}
-	entRegMap[et.Name] = et
-	return et
-}
-
-func EntTypeByName(typename string) *EntType {
-	entRegMapMu.RLock()
-	t := entRegMap[typename]
-	entRegMapMu.RUnlock()
-	return t
-}
-
-func TypeOf(e Ent) *EntType {
-	return EntTypeByName(e.EntTypeName())
 }
 
 // SetEntBaseFieldsAfterLoad sets values of EntBase fields.
@@ -192,7 +147,7 @@ func CreateEnt(e Ent, storage Storage) error {
 		return ErrNoStorage
 	}
 	eb := entBase(e)
-	id, err := storage.CreateEnt(e, eb.fieldmap)
+	id, err := storage.CreateEnt(e, e.EntFields().Fieldmap)
 	if err == nil {
 		eb.id = id
 		eb.version = 1

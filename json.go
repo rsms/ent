@@ -54,7 +54,7 @@ func (c *JsonDecoder) ListHeader() int {
 func jsonDecodeEntIndexed(e Ent, data []byte, fields uint64) (version uint64, err error) {
 	c := NewJsonDecoder(data)
 	if c.DictHeader() != 0 {
-		version = e.EntDecodeIndexed(c, fields)
+		version = e.EntDecodePartial(c, fields)
 	}
 	if err = c.Err(); err != nil {
 		err = &JsonError{err}
@@ -65,7 +65,7 @@ func jsonDecodeEntIndexed(e Ent, data []byte, fields uint64) (version uint64, er
 // The two following functions are used by ent.JsonEncode and ent.JsonDecode to expose a general
 // JSON codec as well as to implement MarshalJSON and UnmarshalJSON for Ent types.
 
-func jsonEncodeEnt(e Ent, id, version, fieldmap uint64) ([]byte, error) {
+func JsonEncodeEnt(e Ent, id, version, fieldmap uint64) ([]byte, error) {
 	c := JsonEncoder{}
 	// c.Builder.Indent = "  " // pretty print
 	c.BeginEnt(version)
@@ -79,7 +79,7 @@ func jsonEncodeEnt(e Ent, id, version, fieldmap uint64) ([]byte, error) {
 	return c.Bytes(), c.Err()
 }
 
-func jsonDecodeEnt(e Ent, data []byte) (id, version uint64, err error) {
+func JsonDecodeEnt(e Ent, data []byte) (id, version uint64, err error) {
 	c := NewJsonDecoder(data)
 	if c.DictHeader() != 0 {
 		id, version = e.EntDecode(c)

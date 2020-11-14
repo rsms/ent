@@ -53,13 +53,13 @@ type Decoder interface {
 	// Only used when ListHeader and DictHeader returns -1.
 	More() bool
 
-	Str() string               // decode a string field
-	Blob() []byte              // decode a byte array field
+	Str() string  // decode a string field
+	Blob() []byte // decode a byte array field
+	Bool() bool
 	Int(bitsize int) int64     // advisory size
 	Uint(bitsize int) uint64   // advisory size
 	Float(bitsize int) float64 // advisory size
-	Bool() bool
-	Discard() // read and discard any value
+	Discard()                  // read and discard any value
 }
 
 // EntIndexFlag describes properties of an EntIndex
@@ -75,6 +75,9 @@ type EntIndex struct {
 	Fields uint64 // bitmap of field indices which this index depends on
 	Flags  EntIndexFlag
 }
+
+// IsUnique is true if a key in index maps to exactly one ent (i.e. keys are unique)
+func (x EntIndex) IsUnique() bool { return (x.Flags & EntIndexUnique) != 0 }
 
 // VersionConflictErr is returned when a Save call fails because the ent has changed
 // by someone else since it was loaded.

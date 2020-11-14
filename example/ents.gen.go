@@ -336,8 +336,8 @@ func (e *Account) EntDecode(c ent.Decoder) (id, version uint64) {
 	return
 }
 
-// EntDecodeIndexed populates requested indexed fields from a decoder
-func (e *Account) EntDecodeIndexed(c ent.Decoder, fields uint64) (version uint64) {
+// EntDecodePartial populates requested indexed fields from a decoder
+func (e *Account) EntDecodePartial(c ent.Decoder, fields uint64) (version uint64) {
 	for n := 7; n > 0; {
 		switch string(c.Key()) {
 		case "":

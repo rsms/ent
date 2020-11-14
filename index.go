@@ -44,6 +44,19 @@ type StorageIndexEdit struct {
 //   }
 //   DecodePartialEnt(prevEnt, fieldsToLoad)
 //
+// Note: StorageIndexEdits with IsCleanup=true always comes before a StorageIndexEdit
+// for the same key that is not a cleanup. This makes it possible to perform patches using
+// a single loop, e.g:
+//
+//   for _, ed := range indexEdits {
+//     key := indexKey(ed.Index.Name, ed.Key)
+//     if ed.IsCleanup {
+//       db.Delete(key)
+//     } else {
+//       db.Set(key, id)
+//     }
+//   }
+//
 func CalcStorageIndexEdits(
 	indexGet IndexGetter,
 	nextEnt, prevEnt Ent,
@@ -83,7 +96,7 @@ func CalcStorageIndexEdits(
 	// if there is no previous ent, mark all fields as changed to ensure that a newly
 	// created ent's indexes are all properly created.
 	if prevEnt == nil {
-		changedFields = fieldmapAll
+		changedFields = nextEnt.EntFields().Fieldmap
 	} else if prevEnt.EntTypeName() != entTypeName {
 		return nil, fmt.Errorf("different ent types (%s, %s)", prevEnt.EntTypeName(), entTypeName)
 	}

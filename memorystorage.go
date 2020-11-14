@@ -47,7 +47,7 @@ func (s *MemoryStorage) loadEnt(e Ent, data []byte) (version uint64, err error) 
 		err = ErrNotFound
 		return
 	}
-	_, version, err = jsonDecodeEnt(e, data) // note: ignore "id" return value
+	_, version, err = JsonDecodeEnt(e, data) // note: ignore "id" return value
 	return
 }
 
@@ -67,10 +67,11 @@ func (s *MemoryStorage) putEnt(e Ent, id, version, changedFields uint64) error {
 	fmt.Printf("\n -- putEnt --\n")
 
 	// encode
-	// Note: fieldmapAll is used here instead of changedFields, since the JSON encoding we use
-	// doesn't support patching. Storage that writes fields to individual cells, like an SQL table
-	// or key-value store entry may make use of fieldmap to store/update only modified fields.
-	json, err := jsonEncodeEnt(e, id, version, fieldmapAll)
+	// Note: EntFields().Fieldmap is used here instead of changedFields, since the JSON encoding
+	// we use doesn't support patching. Storage that writes fields to individual cells,
+	// like an SQL table or key-value store entry may make use of fieldmap to store/update
+	// only modified fields.
+	json, err := JsonEncodeEnt(e, id, version, e.EntFields().Fieldmap)
 	if err != nil {
 		return err
 	}
