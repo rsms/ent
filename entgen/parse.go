@@ -207,7 +207,7 @@ func buildEntInfo(
 		log.Warn("ent type %q (%s.%s) does not have any fields", e.name, pkg.Name, e.sname)
 	}
 
-	fieldIndex := 1
+	fieldIndex := 0
 	for i := 1; i < nfields; i++ {
 		field := st.Fields.List[i]
 		var tags []string

@@ -640,17 +640,6 @@ func (g *Codegen) codegenEnt(e *EntInfo) error {
 	// g.f("var _ = ent.Register(&%s{})\n", e.sname)
 	// wline()
 
-	// entField* constants for symbolic field indices
-	if len(e.fields) > 0 {
-		wstr(
-			"// Symbolic field indices, for use with ent.*FieldChanged methods\n" +
-				"const (\n")
-		for _, field := range e.fields {
-			g.f("  ent_%s_%s\t= %d\n", e.sname, field.sname, field.index)
-		}
-		wstr(")\n\n")
-	}
-
 	// LoadTYPEById(s ent.Storage, id uint64) (*TYPE, error)
 	fname := "Load" + e.sname + "ById"
 	if funcIsUndefined(fname) {
@@ -674,7 +663,7 @@ func (g *Codegen) codegenEnt(e *EntInfo) error {
 	}
 
 	mname := "EntTypeName"
-	if methodMustBeUndefined(mname, "Use tag EntBase `typename` instead.") {
+	if methodMustBeUndefined(mname, "Use tag on EntBase field instead (e.g. `typename`)") {
 		generatedMethods[mname] = true
 		g.f("// %s returns the ent's storage name (%q)\n"+
 			"func (e %s) %s() string\t{ return %#v }\n\n",
@@ -882,44 +871,47 @@ func (g *Codegen) codegenEnt(e *EntInfo) error {
 		if err := g.genEntDecode(e, mname); err != nil {
 			return err
 		}
+	}
 
-		// data & methods for ents with indexes
-		if len(fieldIndexes) > 0 {
+	// -- EntDecodePartial --
+	mname = methodWarnIfDefinedAlt(
+		"EntDecodePartial",
+		"Make sure to call entDecodeIndexed from your EntDecodePartial method",
+	)
+	generatedMethods[mname] = true
+	if err := g.genEntDecodePartial(e, mname); err != nil {
+		return err
+	}
 
-			// -- EntDecodeIndexed --
-			mname = methodWarnIfDefinedAlt(
-				"EntDecodeIndexed",
-				"Make sure to call entDecodeIndexed from your EntDecodeIndexed method",
-			)
-			generatedMethods[mname] = true
-			if err := g.genEntDecodeIndexed(e, mname); err != nil {
-				return err
-			}
+	// EntFields
+	if methodMustBeUndefined("EntFields", "") {
+		g.genEntFields(e)
+	}
 
-			// -- EntIndexes --
-			if methodIsUndefined("EntIndexes") {
-				generatedMethods["EntIndexes"] = true
-				g.f("\n// Indexes (Name, Fields, Flags)\n")
-				g.f("var entIndexes_%s = []ent.EntIndex{\n", e.sname)
-				for _, x := range fieldIndexes {
-					var flags []string
-					if (x.flags & fieldIndexUnique) != 0 {
-						flags = append(flags, "ent.EntIndexUnique")
-					}
-					if len(flags) == 0 {
-						flags = append(flags, "0")
-					}
-					fieldIndices := genFieldmap(e, x.fields)
-					g.f("{ %#v, %s, %s },\n", x.name, fieldIndices, strings.Join(flags, "|"))
+	// data & methods for ents with indexes
+	if len(fieldIndexes) > 0 {
+		// -- EntIndexes --
+		if methodIsUndefined("EntIndexes") {
+			generatedMethods["EntIndexes"] = true
+			g.f("\n// Indexes (Name, Fields, Flags)\n")
+			g.f("var entIndexes_%s = []ent.EntIndex{\n", e.sname)
+			for _, x := range fieldIndexes {
+				var flags []string
+				if (x.flags & fieldIndexUnique) != 0 {
+					flags = append(flags, "ent.EntIndexUnique")
 				}
-				g.f("}\n")
-				g.f("\nfunc (e *%s) EntIndexes() []ent.EntIndex { return entIndexes_%s }\n",
-					e.sname, e.sname)
+				if len(flags) == 0 {
+					flags = append(flags, "0")
+				}
+				fieldIndices := genFieldmap(e, x.fields)
+				g.f("{ %#v, %s, %s },\n", x.name, fieldIndices, strings.Join(flags, "|"))
 			}
-
-		} // if len(fieldIndexes) > 0
-
-	} // if len(e.fields)
+			g.f("}\n\n")
+			g.f("// EntIndexes returns information about secondary indexes\n")
+			g.f("func (e *%s) EntIndexes() []ent.EntIndex { return entIndexes_%s }\n",
+				e.sname, e.sname)
+		}
+	} // if len(fieldIndexes) > 0
 
 	if log.RootLogger.Level <= log.LevelDebug {
 		log.Debug("methods generated for %s:%s", e.sname, fmtMappedNames(generatedMethods))
@@ -975,6 +967,33 @@ func (g *Codegen) scanImportsNeededForEnt(e *EntInfo) {
 	}
 }
 
+func (g *Codegen) genEntFields(e *EntInfo) {
+	// entField* constants for symbolic field indices
+	var fieldmap uint64
+	if len(e.fields) > 0 {
+		g.s("// Symbolic field indices, for use with ent.*FieldChanged methods\n")
+		g.s("const (\n")
+		for _, field := range e.fields {
+			fieldmap |= (1 << field.index)
+			g.f("  ent_%s_%s\t= %d\n", e.sname, field.sname, field.index)
+		}
+		g.s(")\n\n")
+	}
+
+	g.f("// EntFields returns information about %s fields\n", e.sname)
+	g.f("var ent_%s_fields = ent.Fields{\n", e.sname)
+	g.f("  Names: []string{\n")
+	for _, field := range e.fields {
+		g.f("    %#v,\n", field.name)
+	}
+	g.f("  },\n")
+	g.f("  Fieldmap:\t0b%b,\n", fieldmap)
+	g.f("}\n\n")
+
+	g.f("// EntFields returns information about %s fields\n", e.sname)
+	g.f("func (e %s) EntFields() ent.Fields { return ent_%s_fields }\n", e.sname, e.sname)
+}
+
 func genFieldmap(e *EntInfo, fields []*EntField) string {
 	v := make([]string, len(fields))
 	for i, field := range fields {
@@ -999,7 +1018,7 @@ func (g *Codegen) genFindTYPEByINDEX(e *EntInfo, fx *EntFieldIndex) error {
 			pkgnames[pkgname] = struct{}{}
 		}
 	}
-	log.Warn("pkgnames: %#v", pkgnames["uuid"])
+	// log.Debug("package names: %v", pkgnames)
 
 	// args
 	var prevGoType string
@@ -1184,14 +1203,14 @@ func (g *Codegen) genEntDecode(e *EntInfo, mname string) error {
 	return nil
 }
 
-func (g *Codegen) genEntDecodeIndexed(e *EntInfo, mname string) error {
+func (g *Codegen) genEntDecodePartial(e *EntInfo, mname string) error {
 	var indexedFields []*EntField
 	for _, field := range e.fields {
 		if field.storageIndex != nil {
 			indexedFields = append(indexedFields, field)
 		}
 	}
-	g.f("\n// %s populates requested indexed fields from a decoder\n", mname)
+	g.f("\n// %s is used internally by ent.Storage during updates.\n", mname)
 	g.f("func (e *%s) %s(c ent.Decoder, fields uint64) (version uint64) {\n", e.sname, mname)
 	g.f("  for n := %d; n > 0; {\n", len(indexedFields))
 	g.s("    switch string(c.Key()) {\n")
