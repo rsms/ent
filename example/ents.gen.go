@@ -11,28 +11,6 @@ import (
 // ----------------------------------------------------------------------------
 // Account
 
-// Symbolic field indices, for use with ent.*FieldChanged methods
-const (
-	ent_Account_name          = 1
-	ent_Account_width         = 2
-	ent_Account_height        = 3
-	ent_Account_uuid          = 4
-	ent_Account_flag          = 5
-	ent_Account_score         = 6
-	ent_Account_picture       = 7
-	ent_Account_email         = 8
-	ent_Account_emailVerified = 9
-	ent_Account_Deleted       = 10
-	ent_Account_passwordHash  = 11
-	ent_Account_thing         = 12
-	ent_Account_foo           = 13
-	ent_Account_foofoo        = 14
-	ent_Account_data          = 15
-	ent_Account_rgb           = 16
-	ent_Account_threebytes    = 17
-	ent_Account_things        = 18
-)
-
 // LoadAccountById loads Account with id from storage
 func LoadAccountById(storage ent.Storage, id uint64) (*Account, error) {
 	e := &Account{}
@@ -178,106 +156,106 @@ func (e *Account) Rgb() [3]int            { return e.rgb }
 func (e *Account) Threebytes() [3]byte    { return e.threebytes }
 func (e *Account) Things() map[string]int { return e.things }
 
-func (e *Account) SetName(v string)           { e.name = v; ent.SetFieldChanged(&e.EntBase, 1) }
-func (e *Account) setWidth(v int)             { e.width = v; ent.SetFieldChanged(&e.EntBase, 2) }
-func (e *Account) SetHeight(v int)            { e.height = v; ent.SetFieldChanged(&e.EntBase, 3) }
-func (e *Account) SetUuid(v uuid.UUID)        { e.uuid = v; ent.SetFieldChanged(&e.EntBase, 4) }
-func (e *Account) SetFlag(v uint16)           { e.flag = v; ent.SetFieldChanged(&e.EntBase, 5) }
-func (e *Account) SetScore(v float32)         { e.score = v; ent.SetFieldChanged(&e.EntBase, 6) }
-func (e *Account) SetPicture(v []byte)        { e.picture = v; ent.SetFieldChanged(&e.EntBase, 7) }
-func (e *Account) SetEmail(v string)          { e.email = v; ent.SetFieldChanged(&e.EntBase, 8) }
-func (e *Account) SetEmailVerified(v bool)    { e.emailVerified = v; ent.SetFieldChanged(&e.EntBase, 9) }
-func (e *Account) SetDeleted(v bool)          { e.Deleted = v; ent.SetFieldChanged(&e.EntBase, 10) }
-func (e *Account) SetPasswordHash(v string)   { e.passwordHash = v; ent.SetFieldChanged(&e.EntBase, 11) }
-func (e *Account) SetThing(v Thing3)          { e.thing = v; ent.SetFieldChanged(&e.EntBase, 12) }
-func (e *Account) SetFoo(v []int)             { e.foo = v; ent.SetFieldChanged(&e.EntBase, 13) }
-func (e *Account) SetFoofoo(v [][]int16)      { e.foofoo = v; ent.SetFieldChanged(&e.EntBase, 14) }
-func (e *Account) SetData(v Data)             { e.data = v; ent.SetFieldChanged(&e.EntBase, 15) }
-func (e *Account) SetRgb(v [3]int)            { e.rgb = v; ent.SetFieldChanged(&e.EntBase, 16) }
-func (e *Account) SetThreebytes(v [3]byte)    { e.threebytes = v; ent.SetFieldChanged(&e.EntBase, 17) }
-func (e *Account) SetThings(v map[string]int) { e.things = v; ent.SetFieldChanged(&e.EntBase, 18) }
+func (e *Account) SetName(v string)           { e.name = v; ent.SetFieldChanged(&e.EntBase, 0) }
+func (e *Account) setWidth(v int)             { e.width = v; ent.SetFieldChanged(&e.EntBase, 1) }
+func (e *Account) SetHeight(v int)            { e.height = v; ent.SetFieldChanged(&e.EntBase, 2) }
+func (e *Account) SetUuid(v uuid.UUID)        { e.uuid = v; ent.SetFieldChanged(&e.EntBase, 3) }
+func (e *Account) SetFlag(v uint16)           { e.flag = v; ent.SetFieldChanged(&e.EntBase, 4) }
+func (e *Account) SetScore(v float32)         { e.score = v; ent.SetFieldChanged(&e.EntBase, 5) }
+func (e *Account) SetPicture(v []byte)        { e.picture = v; ent.SetFieldChanged(&e.EntBase, 6) }
+func (e *Account) SetEmail(v string)          { e.email = v; ent.SetFieldChanged(&e.EntBase, 7) }
+func (e *Account) SetEmailVerified(v bool)    { e.emailVerified = v; ent.SetFieldChanged(&e.EntBase, 8) }
+func (e *Account) SetDeleted(v bool)          { e.Deleted = v; ent.SetFieldChanged(&e.EntBase, 9) }
+func (e *Account) SetPasswordHash(v string)   { e.passwordHash = v; ent.SetFieldChanged(&e.EntBase, 10) }
+func (e *Account) SetThing(v Thing3)          { e.thing = v; ent.SetFieldChanged(&e.EntBase, 11) }
+func (e *Account) SetFoo(v []int)             { e.foo = v; ent.SetFieldChanged(&e.EntBase, 12) }
+func (e *Account) SetFoofoo(v [][]int16)      { e.foofoo = v; ent.SetFieldChanged(&e.EntBase, 13) }
+func (e *Account) SetData(v Data)             { e.data = v; ent.SetFieldChanged(&e.EntBase, 14) }
+func (e *Account) SetRgb(v [3]int)            { e.rgb = v; ent.SetFieldChanged(&e.EntBase, 15) }
+func (e *Account) SetThreebytes(v [3]byte)    { e.threebytes = v; ent.SetFieldChanged(&e.EntBase, 16) }
+func (e *Account) SetThings(v map[string]int) { e.things = v; ent.SetFieldChanged(&e.EntBase, 17) }
 
-func (e *Account) SetUuidChanged()       { ent.SetFieldChanged(&e.EntBase, 4) }
-func (e *Account) SetPictureChanged()    { ent.SetFieldChanged(&e.EntBase, 7) }
-func (e *Account) SetFooChanged()        { ent.SetFieldChanged(&e.EntBase, 13) }
-func (e *Account) SetFoofooChanged()     { ent.SetFieldChanged(&e.EntBase, 14) }
-func (e *Account) SetDataChanged()       { ent.SetFieldChanged(&e.EntBase, 15) }
-func (e *Account) SetRgbChanged()        { ent.SetFieldChanged(&e.EntBase, 16) }
-func (e *Account) SetThreebytesChanged() { ent.SetFieldChanged(&e.EntBase, 17) }
-func (e *Account) SetThingsChanged()     { ent.SetFieldChanged(&e.EntBase, 18) }
+func (e *Account) SetUuidChanged()       { ent.SetFieldChanged(&e.EntBase, 3) }
+func (e *Account) SetPictureChanged()    { ent.SetFieldChanged(&e.EntBase, 6) }
+func (e *Account) SetFooChanged()        { ent.SetFieldChanged(&e.EntBase, 12) }
+func (e *Account) SetFoofooChanged()     { ent.SetFieldChanged(&e.EntBase, 13) }
+func (e *Account) SetDataChanged()       { ent.SetFieldChanged(&e.EntBase, 14) }
+func (e *Account) SetRgbChanged()        { ent.SetFieldChanged(&e.EntBase, 15) }
+func (e *Account) SetThreebytesChanged() { ent.SetFieldChanged(&e.EntBase, 16) }
+func (e *Account) SetThingsChanged()     { ent.SetFieldChanged(&e.EntBase, 17) }
 
 // ---- encode & decode methods ----
 
 func (e *Account) EntEncode(c ent.Encoder, fields uint64) {
-	if (fields & (1 << 1)) != 0 {
+	if (fields & (1 << 0)) != 0 {
 		c.Key("name")
 		c.Str(e.name)
 	}
-	if (fields & (1 << 2)) != 0 {
+	if (fields & (1 << 1)) != 0 {
 		c.Key("w")
 		c.Int(int64(e.width), 64)
 	}
-	if (fields & (1 << 3)) != 0 {
+	if (fields & (1 << 2)) != 0 {
 		c.Key("h")
 		c.Int(int64(e.height), 64)
 	}
-	if (fields & (1 << 4)) != 0 {
+	if (fields & (1 << 3)) != 0 {
 		c.Key("uuid")
 		c.Blob(e.uuid[:])
 	}
-	if (fields & (1 << 5)) != 0 {
+	if (fields & (1 << 4)) != 0 {
 		c.Key("flag")
 		c.Uint(uint64(e.flag), 16)
 	}
-	if (fields & (1 << 6)) != 0 {
+	if (fields & (1 << 5)) != 0 {
 		c.Key("score")
 		c.Float(float64(e.score), 32)
 	}
-	if (fields & (1 << 7)) != 0 {
+	if (fields & (1 << 6)) != 0 {
 		c.Key("picture")
 		c.Blob(e.picture)
 	}
-	if (fields & (1 << 8)) != 0 {
+	if (fields & (1 << 7)) != 0 {
 		c.Key("email")
 		c.Str(e.email)
 	}
-	if (fields & (1 << 9)) != 0 {
+	if (fields & (1 << 8)) != 0 {
 		c.Key("email_verified")
 		c.Bool(e.emailVerified)
 	}
-	if (fields & (1 << 10)) != 0 {
+	if (fields & (1 << 9)) != 0 {
 		c.Key("deleted")
 		c.Bool(e.Deleted)
 	}
-	if (fields & (1 << 11)) != 0 {
+	if (fields & (1 << 10)) != 0 {
 		c.Key("pwhash")
 		c.Str(e.passwordHash)
 	}
-	if (fields & (1 << 12)) != 0 {
+	if (fields & (1 << 11)) != 0 {
 		c.Key("thing")
 		c.Int(int64(e.thing), 64)
 	}
-	if (fields & (1 << 13)) != 0 {
+	if (fields & (1 << 12)) != 0 {
 		c.Key("foo")
 		ent_encode_Vi00(c, e.foo)
 	}
-	if (fields & (1 << 14)) != 0 {
+	if (fields & (1 << 13)) != 0 {
 		c.Key("foofoo")
 		ent_encode_VVi02(c, e.foofoo)
 	}
-	if (fields & (1 << 15)) != 0 {
+	if (fields & (1 << 14)) != 0 {
 		c.Key("data")
 		c.Blob(e.data)
 	}
-	if (fields & (1 << 16)) != 0 {
+	if (fields & (1 << 15)) != 0 {
 		c.Key("rgb")
 		ent_encode_Vi00(c, e.rgb[:])
 	}
-	if (fields & (1 << 17)) != 0 {
+	if (fields & (1 << 16)) != 0 {
 		c.Key("threebytes")
 		c.Blob(e.threebytes[:])
 	}
-	if (fields & (1 << 18)) != 0 {
+	if (fields & (1 << 17)) != 0 {
 		c.Key("things")
 		ent_encode_Msi00(c, e.things)
 	}
@@ -336,7 +314,7 @@ func (e *Account) EntDecode(c ent.Decoder) (id, version uint64) {
 	return
 }
 
-// EntDecodePartial populates requested indexed fields from a decoder
+// EntDecodePartial is used internally by ent.Storage during updates.
 func (e *Account) EntDecodePartial(c ent.Decoder, fields uint64) (version uint64) {
 	for n := 7; n > 0; {
 		switch string(c.Key()) {
@@ -347,43 +325,43 @@ func (e *Account) EntDecodePartial(c ent.Decoder, fields uint64) (version uint64
 			continue
 		case "w":
 			n--
-			if (fields & (1 << 2)) != 0 {
+			if (fields & (1 << 1)) != 0 {
 				e.width = int(c.Int(64))
 				continue
 			}
 		case "h":
 			n--
-			if (fields & (1 << 3)) != 0 {
+			if (fields & (1 << 2)) != 0 {
 				e.height = int(c.Int(64))
 				continue
 			}
 		case "uuid":
 			n--
-			if (fields & (1 << 4)) != 0 {
+			if (fields & (1 << 3)) != 0 {
 				e.uuid = uuid.UUID(ent_slice_to_A16_u01(c.Blob()))
 				continue
 			}
 		case "flag":
 			n--
-			if (fields & (1 << 5)) != 0 {
+			if (fields & (1 << 4)) != 0 {
 				e.flag = uint16(c.Uint(16))
 				continue
 			}
 		case "score":
 			n--
-			if (fields & (1 << 6)) != 0 {
+			if (fields & (1 << 5)) != 0 {
 				e.score = float32(c.Float(32))
 				continue
 			}
 		case "picture":
 			n--
-			if (fields & (1 << 7)) != 0 {
+			if (fields & (1 << 6)) != 0 {
 				e.picture = c.Blob()
 				continue
 			}
 		case "email":
 			n--
-			if (fields & (1 << 8)) != 0 {
+			if (fields & (1 << 7)) != 0 {
 				e.email = c.Str()
 				continue
 			}
@@ -392,6 +370,56 @@ func (e *Account) EntDecodePartial(c ent.Decoder, fields uint64) (version uint64
 	}
 	return
 }
+
+// Symbolic field indices, for use with ent.*FieldChanged methods
+const (
+	ent_Account_name          = 0
+	ent_Account_width         = 1
+	ent_Account_height        = 2
+	ent_Account_uuid          = 3
+	ent_Account_flag          = 4
+	ent_Account_score         = 5
+	ent_Account_picture       = 6
+	ent_Account_email         = 7
+	ent_Account_emailVerified = 8
+	ent_Account_Deleted       = 9
+	ent_Account_passwordHash  = 10
+	ent_Account_thing         = 11
+	ent_Account_foo           = 12
+	ent_Account_foofoo        = 13
+	ent_Account_data          = 14
+	ent_Account_rgb           = 15
+	ent_Account_threebytes    = 16
+	ent_Account_things        = 17
+)
+
+// EntFields returns information about Account fields
+var ent_Account_fields = ent.Fields{
+	Names: []string{
+		"name",
+		"w",
+		"h",
+		"uuid",
+		"flag",
+		"score",
+		"picture",
+		"email",
+		"email_verified",
+		"deleted",
+		"pwhash",
+		"thing",
+		"foo",
+		"foofoo",
+		"data",
+		"rgb",
+		"threebytes",
+		"things",
+	},
+	Fieldmap: 0b111111111111111111,
+}
+
+// EntFields returns information about Account fields
+func (e Account) EntFields() ent.Fields { return ent_Account_fields }
 
 // Indexes (Name, Fields, Flags)
 var entIndexes_Account = []ent.EntIndex{
@@ -403,6 +431,7 @@ var entIndexes_Account = []ent.EntIndex{
 	{"uuid", 1 << ent_Account_uuid, ent.EntIndexUnique},
 }
 
+// EntIndexes returns information about secondary indexes
 func (e *Account) EntIndexes() []ent.EntIndex { return entIndexes_Account }
 
 // ---- helpers ----
