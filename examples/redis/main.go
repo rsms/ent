@@ -1,3 +1,4 @@
+//go:generate entgen
 package main
 
 import (
@@ -12,14 +13,14 @@ type Account struct {
 	ent.EntBase   `account`
 	name          string `ent:",index"`
 	email         string `ent:",unique"`
-	emailVerified bool   `ent:"email_verified,badtag"`
+	emailVerified bool   `ent:"email_verified"`
 	deleted       bool
 	passwordHash  string `ent:"pwhash" json:"-"` // omit from json (never leak)
 }
 
 func main() {
 	r := &redis.Redis{}
-	if err := r.Open("127.0.0.1:6379", ""); err != nil {
+	if err := r.Open("127.0.0.1:6379", "", 1); err != nil {
 		panic(err)
 	}
 	estore := redis.NewEntStorage(r)

@@ -1,9 +1,11 @@
+//go:generate entgen
 package main
 
 import (
 	"fmt"
 
 	"github.com/rsms/ent"
+	"github.com/rsms/ent/mem"
 	uid "github.com/rsms/go-uuid"
 )
 
@@ -58,7 +60,7 @@ func (e *Account) MarshalJSON() ([]byte, error) {
 // }
 
 func main() {
-	estore := ent.NewMemoryStorage()
+	estore := mem.NewMemoryStorage()
 
 	indexLookup := func(index, key string) []uint64 {
 		ids, err := estore.FindEntIdsByIndex(Account{}.EntTypeName(), index, []byte(key))

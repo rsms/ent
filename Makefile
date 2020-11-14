@@ -14,7 +14,4 @@ doc:
 	         (sleep 1 && open "http://localhost:6060/pkg/github.com/rsms/ent/") &'
 	godoc -http=localhost:6060
 
-example:
-	cd example
-
-.PHONY: test entgen fmt doc example
+.PHONY: test entgen fmt doc

@@ -6,15 +6,16 @@ import (
 	"strconv"
 )
 
-type idSet []uint64
+// IdSet is a list of integers which are treated as a set
+type IdSet []uint64
 
-func parseIdSet(data []byte) idSet {
-	var ids idSet
+func ParseIdSet(data []byte) IdSet {
+	var ids IdSet
 	if len(data) > 0 {
 		for _, chunk := range bytes.Split(data, []byte{' '}) {
 			u, err := strconv.ParseUint(string(chunk), 10, 64)
 			if err != nil {
-				panic("failed to parse idSet " + err.Error())
+				panic("failed to parse IdSet " + err.Error())
 			}
 			ids = append(ids, u)
 		}
@@ -22,9 +23,9 @@ func parseIdSet(data []byte) idSet {
 	return ids
 }
 
-func encodeIds(ids []uint64) []byte {
-	buf := make([]byte, 0, 10*len(ids))
-	for i, id := range ids {
+func (s IdSet) Encode() []byte {
+	buf := make([]byte, 0, 10*len(s))
+	for i, id := range s {
 		if i > 0 {
 			buf = append(buf, ' ')
 		}
@@ -33,11 +34,7 @@ func encodeIds(ids []uint64) []byte {
 	return buf
 }
 
-func (s idSet) Encode() []byte {
-	return encodeIds(s)
-}
-
-func (s idSet) Has(id uint64) bool {
+func (s IdSet) Has(id uint64) bool {
 	for _, v := range s {
 		if v == id {
 			return true
@@ -46,7 +43,7 @@ func (s idSet) Has(id uint64) bool {
 	return false
 }
 
-func (s *idSet) Add(id uint64) {
+func (s *IdSet) Add(id uint64) {
 	for _, v := range *s {
 		if v == id {
 			return
@@ -55,7 +52,7 @@ func (s *idSet) Add(id uint64) {
 	*s = append(*s, id)
 }
 
-func (s *idSet) Del(id uint64) {
+func (s *IdSet) Del(id uint64) {
 	for i, v := range *s {
 		if v == id {
 			// splice
@@ -66,6 +63,6 @@ func (s *idSet) Del(id uint64) {
 	}
 }
 
-func (s idSet) Sort() {
+func (s IdSet) Sort() {
 	sort.Slice(s, func(i, j int) bool { return s[i] < s[j] })
 }

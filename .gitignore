@@ -1,4 +1,4 @@
 /_*
 /entgen/entgen
-/example/example
-/example-redis/example-redis
+/examples/mem/mem
+/examples/redis/redis

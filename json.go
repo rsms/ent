@@ -51,7 +51,9 @@ func (c *JsonDecoder) ListHeader() int {
 
 // -------------
 
-func jsonDecodeEntIndexed(e Ent, data []byte, fields uint64) (version uint64, err error) {
+// JsonDecodeEntPartial is a utility function for decoding a partial ent.
+// It calls e.EntDecodePartial and thus is limited to fields that participate in indexes.
+func JsonDecodeEntPartial(e Ent, data []byte, fields uint64) (version uint64, err error) {
 	c := NewJsonDecoder(data)
 	if c.DictHeader() != 0 {
 		version = e.EntDecodePartial(c, fields)

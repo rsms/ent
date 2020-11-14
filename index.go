@@ -149,7 +149,7 @@ func CalcStorageIndexEdits(
 				// fmt.Printf("index keys are identical; skip. (%q, %q)\n", prevValueKey, nextValueKey)
 				continue
 			}
-			var ids idSet
+			var ids IdSet
 			var err error
 			ids, err = indexGet(entTypeName, x.Name, prevValueKey)
 			if err != nil {
@@ -173,9 +173,9 @@ func CalcStorageIndexEdits(
 
 		// add new entry
 		if nextValueKey != "" {
-			var ids idSet
+			var ids IdSet
 			if isUnique {
-				ids = idSet{id}
+				ids = IdSet{id}
 			} else {
 				var err error
 				ids, err = indexGet(entTypeName, x.Name, nextValueKey)
