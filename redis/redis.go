@@ -17,7 +17,7 @@ type Redis struct {
 	roc *radix.Pool // read-only redis server connection (if nil, use rwc for reads)
 }
 
-func (r *Redis) Open(rwaddr, roaddr string) error {
+func (r *Redis) Open(rwaddr, roaddr string, connPoolSize int) error {
 	if roaddr == "" {
 		roaddr = rwaddr
 	} else if rwaddr == "" {
@@ -25,7 +25,7 @@ func (r *Redis) Open(rwaddr, roaddr string) error {
 	}
 
 	// connect to read-write server (LEADER)
-	rwc, err := radix.NewPool("tcp", rwaddr, 16)
+	rwc, err := radix.NewPool("tcp", rwaddr, connPoolSize)
 	if err != nil {
 		return err
 	}
@@ -33,7 +33,7 @@ func (r *Redis) Open(rwaddr, roaddr string) error {
 	// if a different address is provided for roc, connect to read-only server (FOLLOWER)
 	var roc *radix.Pool
 	if rwaddr != roaddr {
-		roc, err = radix.NewPool("tcp", roaddr, 16)
+		roc, err = radix.NewPool("tcp", roaddr, connPoolSize)
 		if err != nil {
 			rwc.Close()
 			return err
@@ -52,9 +52,9 @@ func (r *Redis) Open(rwaddr, roaddr string) error {
 }
 
 // OpenRetry calls Open until it succeeds, with a second delay in between
-func (r *Redis) OpenRetry(rwaddr, roaddr string) {
+func (r *Redis) OpenRetry(rwaddr, roaddr string, connPoolSize int) {
 	for {
-		err := r.Open(rwaddr, roaddr)
+		err := r.Open(rwaddr, roaddr, connPoolSize)
 		if err == nil {
 			break
 		}
@@ -203,9 +203,9 @@ func (r *Redis) Batch(f func(c radix.Conn) error) error {
 
 // constant commands without results
 var (
-	CmdMULTI   = RawCmd{Data: []byte("*1\r\n$5\r\nMULTI\r\n")}
-	CmdDISCARD = RawCmd{Data: []byte("*1\r\n$7\r\nDISCARD\r\n")}
-	CmdUNWATCH = RawCmd{Data: []byte("*1\r\n$7\r\nUNWATCH\r\n")}
+	CmdMULTI   = RawCmd{[]byte("*1\r\n$5\r\nMULTI\r\n")}
+	CmdDISCARD = RawCmd{[]byte("*1\r\n$7\r\nDISCARD\r\n")}
+	CmdUNWATCH = RawCmd{[]byte("*1\r\n$7\r\nUNWATCH\r\n")}
 )
 
 // —————————————————————————————————————————————————————————————————————————————————————————————
@@ -234,28 +234,5 @@ func (c *RawCmd) UnmarshalRESP(r *bufio.Reader) error {
 	var buf [32]byte
 	reader := RReader{r: r, buf: buf[:]}
 	reader.Discard()
-	return reader.Err()
-}
-
-// ---
-
-// RawCmdRes is like RawCmd but reads the result
-type RawCmdRes struct { // conforms to radix.Marshaler
-	RawCmd
-	ResType RESPType // response type
-	ResData []byte   // response data
-}
-
-func (c *RawCmdRes) Run(conn radix.Conn) error {
-	if err := conn.Encode(c); err != nil {
-		return err
-	}
-	return conn.Decode(c)
-}
-
-func (c *RawCmdRes) UnmarshalRESP(r *bufio.Reader) error {
-	var buf [32]byte // must be at least intBase10MaxLen
-	reader := RReader{r: r, buf: buf[:]}
-	c.ResType, c.ResData = reader.Scalar()
 	return reader.Err()
 }

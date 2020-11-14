@@ -22,9 +22,9 @@ func NewEntStorage(r *Redis) *EntStorage {
 }
 
 func debugTrace(format string, args ...interface{}) {
-	// (un)comment this line to toggle debug trace logging.
 	// The Go compiler will strip all invocations of debugTrace when the function body is empty.
-	// fmt.Printf("TRACE "+format+"\n", args...)
+	// (un)comment the next line to toggle debug trace logging:
+	fmt.Printf("TRACE "+format+"\n", args...)
 }
 
 // LoadEntById is part of the ent.Storage interface, used by LoadTYPEById()
@@ -38,6 +38,7 @@ func (s *EntStorage) LoadEntById(e Ent, id uint64) (version uint64, err error) {
 		},
 		func(r *RReader) (err error) {
 			_, version, err = decodeEnt(e, r)
+
 			return
 		},
 	})
@@ -114,7 +115,7 @@ func (s *EntStorage) putEnt(e ent.Ent, id, prevVersion, nextVersion, fieldmap ui
 		var currEnt ent.Ent
 		if prevVersion != 0 {
 			currEnt = e.EntNew()
-			currVersion, err := s.loadEntPartial(currEnt, key, fieldmap)
+			currVersion, err := s.loadEntPartial(c, currEnt, key, fieldmap)
 			debugTrace("loadEntPartial %q => version=%v %+v", key, currVersion, currEnt)
 			if err != nil {
 				return err
@@ -242,7 +243,7 @@ func (s *EntStorage) LoadEntsByIndex(e Ent, indexName string, key []byte) ([]Ent
 // loadEntPartial
 // Note: If an ent is not found, this returns version=0 (it does NOT return ent.ErrNotFound)
 func (s *EntStorage) loadEntPartial(
-	e Ent, key string, fieldmap uint64) (version uint64, err error) {
+	c radix.Conn, e Ent, key string, fieldmap uint64) (version uint64, err error) {
 	// list of keys to fetch
 	keys := make([]string, 1, bits.PopcountUint64(fieldmap)+1)
 	keys[0] = ent.FieldNameVersion
@@ -252,7 +253,7 @@ func (s *EntStorage) loadEntPartial(
 		}
 	}
 	// communicate with redis
-	err = s.r.doRead(&RCmd{
+	err = c.Do(&RCmd{
 		func(w *RWriter) error {
 			// encode query
 			w.ArrayHeader(len(keys) + 2)
@@ -309,7 +310,7 @@ func encodeEnt(e Ent, w *RWriter, key string, version, fieldmap uint64) ([]byte,
 		c.Uint(version, 64)
 	}
 	e.EntEncode(&c, fieldmap)
-	respData := c.Bytes()
+	respData := c.Buffer()
 	if c.err == nil {
 		debugTrace("encodeEnt HSET %q", c.buf)
 		_, c.err = w.w.Write(respData)
@@ -369,15 +370,10 @@ func (c *EntEncoder) BeginHSET(key string, nfields int) {
 	c.buf = respAppendBulkString(buf, []byte(key))
 }
 
-func (c *EntEncoder) Bytes() []byte { return c.buf }
+func (c *EntEncoder) Buffer() []byte { return c.buf }
 
-func (c *EntEncoder) Key(k string) {
-	c.buf = respAppendBulkString(c.buf, []byte(k))
-}
-
-func (c *EntEncoder) Err() error { return c.err }
-
-// func (c *EntEncoder) Key(k string)  { c.Blob([]byte(k)) }
+func (c *EntEncoder) Err() error    { return c.err }
+func (c *EntEncoder) Key(k string)  { c.Str(k) }
 func (c *EntEncoder) Str(v string)  { c.buf = respAppendBulkString(c.buf, []byte(v)) }
 func (c *EntEncoder) Blob(v []byte) { c.buf = respAppendBulkString(c.buf, v) }
 
