@@ -62,16 +62,8 @@ func (e *Account) MarshalJSON() ([]byte, error) {
 func main() {
 	estore := mem.NewMemoryStorage()
 
-	indexLookup := func(index, key string) []uint64 {
-		ids, err := estore.FindEntIdsByIndex(Account{}.EntTypeName(), index, []byte(key))
-		if err != nil {
-			panic(err)
-		}
-		return ids
-	}
-
-	ids := indexLookup("email", "bob@bob.com")
-	fmt.Printf("indexLookup email bob@bob.com => %v\n", ids)
+	ids, _ := FindAccountByEmail(estore, "bob@bob.com")
+	fmt.Printf("FindAccountByEmail bob@bob.com => %v\n", ids)
 
 	a1 := &Account{}
 	a1.SetName("bob")
@@ -107,34 +99,30 @@ func main() {
 	}
 	fmt.Printf("loaded account by email %q: %+v\n", "bob@bob.com", a1c)
 
-	ids1 := indexLookup("email", "bob@bob.com")
-	ids2 := indexLookup("size", "h\xff0\xffw\xff0")
-	fmt.Printf("indexLookup email bob@bob.com => %v\n", ids1)
-	fmt.Printf("indexLookup size 0x0 => %v\n", ids2)
+	ids1, _ := FindAccountByEmail(estore, "bob@bob.com")
+	ids2, _ := FindAccountBySize(estore, 0, 0)
+	fmt.Printf("FindAccountByEmail bob@bob.com => %v\n", ids1)
+	fmt.Printf("FindAccountBySize 0x0 => %v\n", ids2)
 
 	a1.SetEmail("bobby@bob.com") // causes the "email" index to be updated
 	a1.SetWidth(100)             // causes the "size" index to be updated
 	fmt.Printf("ent.IsFieldChanged(ent_Account_width) => %v\n",
-		a1.EntIsFieldChanged(ent_Account_width))
+		a1.EntIsFieldChanged(ent_Account_f_width))
 	if err := a1.Save(); err != nil {
 		panic(err)
 	}
 
-	ids1 = indexLookup("email", "bob@bob.com")
-	ids2 = indexLookup("email", "bobby@bob.com")
-	fmt.Printf("indexLookup email bob@bob.com   => %v\n", ids1)
-	fmt.Printf("indexLookup email bobby@bob.com => %v\n", ids2)
+	ids3, _ := FindAccountByEmail(estore, "bob@bob.com")
+	ids4, _ := FindAccountByEmail(estore, "bobby@bob.com")
+	fmt.Printf("indexLookup email bob@bob.com   => %v\n", ids3)
+	fmt.Printf("indexLookup email bobby@bob.com => %v\n", ids4)
 
-	ids1 = indexLookup("size", "h\xff0\xffw\xff0")
-	ids2 = indexLookup("size", "h\xff0\xffw\xff2s") // base36
-	fmt.Printf("indexLookup size 0x0   => %v\n", ids1)
-	fmt.Printf("indexLookup size 100x0 => %v\n", ids2)
+	ids5, _ := FindAccountBySize(estore, 0, 0)
+	ids6, _ := FindAccountBySize(estore, 100, 0)
+	fmt.Printf("FindAccountBySize 0x0   => %v\n", ids5)
+	fmt.Printf("FindAccountBySize 100x0 => %v\n", ids6)
 
-	ids, err = FindAccountBySize(estore, 100, 0)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf("FindAccountBySize(100,0) => %v\n", ids)
+	fmt.Printf("\nall ok\n")
 
 	// a2 := &Account{}
 	// a2.SetName("jane")

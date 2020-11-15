@@ -20,19 +20,19 @@ func LoadAccountById(storage ent.Storage, id uint64) (*Account, error) {
 // LoadAccountByEmail loads Account with email
 func LoadAccountByEmail(s ent.Storage, email string) (*Account, error) {
 	e := &Account{}
-	err := ent.LoadEntByIndexKey(s, e, "email", []byte(email))
+	err := ent.LoadEntByIndexKey(s, e, &ent_Account_idx[0], []byte(email))
 	return e, err
 }
 
 // FindAccountByEmail looks up Account id with email
 func FindAccountByEmail(s ent.Storage, email string) (uint64, error) {
-	return ent.FindEntIdByIndexKey(s, "account", "email", []byte(email))
+	return ent.FindEntIdByIndexKey(s, "account", &ent_Account_idx[0], []byte(email))
 }
 
 // LoadAccountByFlag loads all Account ents with flag
 func LoadAccountByFlag(s ent.Storage, flag uint16) ([]*Account, error) {
 	e := &Account{}
-	r, err := ent.LoadEntsByIndex(s, e, "flag", 1, func(c ent.Encoder) {
+	r, err := ent.LoadEntsByIndex(s, e, &ent_Account_idx[1], 1, func(c ent.Encoder) {
 		c.Uint(uint64(flag), 16)
 	})
 	return ent_Account_slice_cast(r), err
@@ -40,7 +40,7 @@ func LoadAccountByFlag(s ent.Storage, flag uint16) ([]*Account, error) {
 
 // FindAccountByFlag looks up Account ids with flag
 func FindAccountByFlag(s ent.Storage, flag uint16) ([]uint64, error) {
-	return ent.FindEntIdsByIndex(s, "account", "flag", 1, func(c ent.Encoder) {
+	return ent.FindEntIdsByIndex(s, "account", &ent_Account_idx[1], 1, func(c ent.Encoder) {
 		c.Uint(uint64(flag), 16)
 	})
 }
@@ -48,19 +48,19 @@ func FindAccountByFlag(s ent.Storage, flag uint16) ([]uint64, error) {
 // LoadAccountByPicture loads all Account ents with picture
 func LoadAccountByPicture(s ent.Storage, picture []byte) ([]*Account, error) {
 	e := &Account{}
-	r, err := s.LoadEntsByIndex(e, "picture", picture)
+	r, err := s.LoadEntsByIndex(e, &ent_Account_idx[2], picture)
 	return ent_Account_slice_cast(r), err
 }
 
 // FindAccountByPicture looks up Account ids with picture
 func FindAccountByPicture(s ent.Storage, picture []byte) ([]uint64, error) {
-	return s.FindEntIdsByIndex("account", "picture", picture)
+	return s.FindEntIdsByIndex("account", &ent_Account_idx[2], picture)
 }
 
 // LoadAccountByScore loads all Account ents with score
 func LoadAccountByScore(s ent.Storage, score float32) ([]*Account, error) {
 	e := &Account{}
-	r, err := ent.LoadEntsByIndex(s, e, "score", 1, func(c ent.Encoder) {
+	r, err := ent.LoadEntsByIndex(s, e, &ent_Account_idx[3], 1, func(c ent.Encoder) {
 		c.Float(float64(score), 32)
 	})
 	return ent_Account_slice_cast(r), err
@@ -68,7 +68,7 @@ func LoadAccountByScore(s ent.Storage, score float32) ([]*Account, error) {
 
 // FindAccountByScore looks up Account ids with score
 func FindAccountByScore(s ent.Storage, score float32) ([]uint64, error) {
-	return ent.FindEntIdsByIndex(s, "account", "score", 1, func(c ent.Encoder) {
+	return ent.FindEntIdsByIndex(s, "account", &ent_Account_idx[3], 1, func(c ent.Encoder) {
 		c.Float(float64(score), 32)
 	})
 }
@@ -76,7 +76,7 @@ func FindAccountByScore(s ent.Storage, score float32) ([]uint64, error) {
 // LoadAccountBySize loads all Account ents matching width AND height
 func LoadAccountBySize(s ent.Storage, width, height int) ([]*Account, error) {
 	e := &Account{}
-	r, err := ent.LoadEntsByIndex(s, e, "size", 2, func(c ent.Encoder) {
+	r, err := ent.LoadEntsByIndex(s, e, &ent_Account_idx[4], 2, func(c ent.Encoder) {
 		c.Key("w")
 		c.Int(int64(width), 64)
 		c.Key("h")
@@ -87,7 +87,7 @@ func LoadAccountBySize(s ent.Storage, width, height int) ([]*Account, error) {
 
 // FindAccountBySize looks up Account ids matching width AND height
 func FindAccountBySize(s ent.Storage, width, height int) ([]uint64, error) {
-	return ent.FindEntIdsByIndex(s, "account", "size", 2, func(c ent.Encoder) {
+	return ent.FindEntIdsByIndex(s, "account", &ent_Account_idx[4], 2, func(c ent.Encoder) {
 		c.Key("w")
 		c.Int(int64(width), 64)
 		c.Key("h")
@@ -98,7 +98,7 @@ func FindAccountBySize(s ent.Storage, width, height int) ([]uint64, error) {
 // LoadAccountByUuid loads Account with uuid_
 func LoadAccountByUuid(s ent.Storage, uuid_ uuid.UUID) (*Account, error) {
 	e := &Account{}
-	err := ent.LoadEntByIndex(s, e, "uuid", func(c ent.Encoder) {
+	err := ent.LoadEntByIndex(s, e, &ent_Account_idx[5], func(c ent.Encoder) {
 		c.Blob(uuid_[:])
 	})
 	return e, err
@@ -106,7 +106,7 @@ func LoadAccountByUuid(s ent.Storage, uuid_ uuid.UUID) (*Account, error) {
 
 // FindAccountByUuid looks up Account id with uuid_
 func FindAccountByUuid(s ent.Storage, uuid_ uuid.UUID) (uint64, error) {
-	return ent.FindEntIdByIndex(s, "account", "uuid", func(c ent.Encoder) {
+	return ent.FindEntIdByIndex(s, "account", &ent_Account_idx[5], func(c ent.Encoder) {
 		c.Blob(uuid_[:])
 	})
 }
@@ -373,24 +373,24 @@ func (e *Account) EntDecodePartial(c ent.Decoder, fields uint64) (version uint64
 
 // Symbolic field indices, for use with ent.*FieldChanged methods
 const (
-	ent_Account_name          = 0
-	ent_Account_width         = 1
-	ent_Account_height        = 2
-	ent_Account_uuid          = 3
-	ent_Account_flag          = 4
-	ent_Account_score         = 5
-	ent_Account_picture       = 6
-	ent_Account_email         = 7
-	ent_Account_emailVerified = 8
-	ent_Account_Deleted       = 9
-	ent_Account_passwordHash  = 10
-	ent_Account_thing         = 11
-	ent_Account_foo           = 12
-	ent_Account_foofoo        = 13
-	ent_Account_data          = 14
-	ent_Account_rgb           = 15
-	ent_Account_threebytes    = 16
-	ent_Account_things        = 17
+	ent_Account_f_name          = 0
+	ent_Account_f_width         = 1
+	ent_Account_f_height        = 2
+	ent_Account_f_uuid          = 3
+	ent_Account_f_flag          = 4
+	ent_Account_f_score         = 5
+	ent_Account_f_picture       = 6
+	ent_Account_f_email         = 7
+	ent_Account_f_emailVerified = 8
+	ent_Account_f_Deleted       = 9
+	ent_Account_f_passwordHash  = 10
+	ent_Account_f_thing         = 11
+	ent_Account_f_foo           = 12
+	ent_Account_f_foofoo        = 13
+	ent_Account_f_data          = 14
+	ent_Account_f_rgb           = 15
+	ent_Account_f_threebytes    = 16
+	ent_Account_f_things        = 17
 )
 
 // EntFields returns information about Account fields
@@ -422,17 +422,17 @@ var ent_Account_fields = ent.Fields{
 func (e Account) EntFields() ent.Fields { return ent_Account_fields }
 
 // Indexes (Name, Fields, Flags)
-var entIndexes_Account = []ent.EntIndex{
-	{"email", 1 << ent_Account_email, ent.EntIndexUnique},
-	{"flag", 1 << ent_Account_flag, 0},
-	{"picture", 1 << ent_Account_picture, 0},
-	{"score", 1 << ent_Account_score, 0},
-	{"size", (1 << ent_Account_width) | (1 << ent_Account_height), 0},
-	{"uuid", 1 << ent_Account_uuid, ent.EntIndexUnique},
+var ent_Account_idx = []ent.EntIndex{
+	{"email", 1 << ent_Account_f_email, ent.EntIndexUnique},
+	{"flag", 1 << ent_Account_f_flag, 0},
+	{"picture", 1 << ent_Account_f_picture, 0},
+	{"score", 1 << ent_Account_f_score, 0},
+	{"size", (1 << ent_Account_f_width) | (1 << ent_Account_f_height), 0},
+	{"uuid", 1 << ent_Account_f_uuid, ent.EntIndexUnique},
 }
 
 // EntIndexes returns information about secondary indexes
-func (e *Account) EntIndexes() []ent.EntIndex { return entIndexes_Account }
+func (e *Account) EntIndexes() []ent.EntIndex { return ent_Account_idx }
 
 // ---- helpers ----
 

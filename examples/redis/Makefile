@@ -7,7 +7,8 @@ ents.gen.go: main.go
 	@PATH=$(PATH) entgen -v
 
 dev:
-	autorun ../../*.go ../../redis/*.go *.go -- \
-		"go fmt . ../.. ../../redis && ../../entgen/entgen && go build && ./redis"
+	autorun main.go ../../*.go ../../entgen/*.go ../../redis/*.go -- \
+		"go fmt . ../.. ../../entgen ../../redis && \
+		 make -C ../../entgen && make ents.gen.go && go build && ./redis"
 
 .PHONY: dev

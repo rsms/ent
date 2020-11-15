@@ -52,7 +52,16 @@ func main() {
 	}
 	fmt.Printf("saved account #%d\n", a1.Id())
 
+	// save outdated should fail
 	fmt.Printf("\n-- save outdated --\n")
 	a2.SetName("Bo")
-	fmt.Printf("outdated.Save() => %v\n", a2.Save())
+	fmt.Printf("outdated.Save() [should fail] => error: %v\n", a2.Save())
+
+	// load by unique index
+	fmt.Printf("\n-- load by unique index --\n")
+	a3, err := LoadAccountByEmail(estore, a1.Email())
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("loaded account by email %q: %+v\n", a1.Email(), a3)
 }

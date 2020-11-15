@@ -17,25 +17,25 @@ func LoadAccountById(storage ent.Storage, id uint64) (*Account, error) {
 // LoadAccountByEmail loads Account with email
 func LoadAccountByEmail(s ent.Storage, email string) (*Account, error) {
 	e := &Account{}
-	err := ent.LoadEntByIndexKey(s, e, "email", []byte(email))
+	err := ent.LoadEntByIndexKey(s, e, &ent_Account_idx[0], []byte(email))
 	return e, err
 }
 
 // FindAccountByEmail looks up Account id with email
 func FindAccountByEmail(s ent.Storage, email string) (uint64, error) {
-	return ent.FindEntIdByIndexKey(s, "account", "email", []byte(email))
+	return ent.FindEntIdByIndexKey(s, "account", &ent_Account_idx[0], []byte(email))
 }
 
 // LoadAccountByName loads all Account ents with name
 func LoadAccountByName(s ent.Storage, name string) ([]*Account, error) {
 	e := &Account{}
-	r, err := s.LoadEntsByIndex(e, "name", []byte(name))
+	r, err := s.LoadEntsByIndex(e, &ent_Account_idx[1], []byte(name))
 	return ent_Account_slice_cast(r), err
 }
 
 // FindAccountByName looks up Account ids with name
 func FindAccountByName(s ent.Storage, name string) ([]uint64, error) {
-	return s.FindEntIdsByIndex("account", "name", []byte(name))
+	return s.FindEntIdsByIndex("account", &ent_Account_idx[1], []byte(name))
 }
 
 // EntTypeName returns the ent's storage name ("account")
@@ -157,11 +157,11 @@ func (e *Account) EntDecodePartial(c ent.Decoder, fields uint64) (version uint64
 
 // Symbolic field indices, for use with ent.*FieldChanged methods
 const (
-	ent_Account_name          = 0
-	ent_Account_email         = 1
-	ent_Account_emailVerified = 2
-	ent_Account_deleted       = 3
-	ent_Account_passwordHash  = 4
+	ent_Account_f_name          = 0
+	ent_Account_f_email         = 1
+	ent_Account_f_emailVerified = 2
+	ent_Account_f_deleted       = 3
+	ent_Account_f_passwordHash  = 4
 )
 
 // EntFields returns information about Account fields
@@ -180,13 +180,13 @@ var ent_Account_fields = ent.Fields{
 func (e Account) EntFields() ent.Fields { return ent_Account_fields }
 
 // Indexes (Name, Fields, Flags)
-var entIndexes_Account = []ent.EntIndex{
-	{"email", 1 << ent_Account_email, ent.EntIndexUnique},
-	{"name", 1 << ent_Account_name, 0},
+var ent_Account_idx = []ent.EntIndex{
+	{"email", 1 << ent_Account_f_email, ent.EntIndexUnique},
+	{"name", 1 << ent_Account_f_name, 0},
 }
 
 // EntIndexes returns information about secondary indexes
-func (e *Account) EntIndexes() []ent.EntIndex { return entIndexes_Account }
+func (e *Account) EntIndexes() []ent.EntIndex { return ent_Account_idx }
 
 // ---- helpers ----
 
