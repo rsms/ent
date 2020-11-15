@@ -25,7 +25,7 @@ type StorageIndexEdit struct {
 	IsCleanup bool
 }
 
-// CalcStorageIndexEdits calculates changes to secondary indexes.
+// ComputeIndexEdits calculates changes to secondary indexes.
 //
 // When a new ent is created, prevEnt should be nil.
 // When an ent is deleted, nextEnt should be nil.
@@ -57,7 +57,12 @@ type StorageIndexEdit struct {
 //     }
 //   }
 //
-func CalcStorageIndexEdits(
+// indexGet may be nil in which case it is assumed that calling storage handles sets of ids.
+// For example, ent/redis.EntStorage handles ids of non-unique indexes manually and thus
+// provides nil for indexGet, while ent/mem.EntStorage does not handle id sets itself and instead
+// provides a function, for reading its current state, as indexGet.
+//
+func ComputeIndexEdits(
 	indexGet IndexGetter,
 	nextEnt, prevEnt Ent,
 	id, changedFields uint64,
@@ -91,12 +96,18 @@ func CalcStorageIndexEdits(
 	//     3. add entry to the main index:               "index:name Ali" [] => [ent1]
 	//
 
-	entTypeName := nextEnt.EntTypeName()
+	// pick any ent for read-only operations
+	roEnt := nextEnt
+	if roEnt == nil {
+		roEnt = prevEnt
+	}
+
+	entTypeName := roEnt.EntTypeName()
 
 	// if there is no previous ent, mark all fields as changed to ensure that a newly
 	// created ent's indexes are all properly created.
 	if prevEnt == nil {
-		changedFields = nextEnt.EntFields().Fieldmap
+		changedFields = roEnt.EntFields().Fieldmap
 	} else if prevEnt.EntTypeName() != entTypeName {
 		return nil, fmt.Errorf("different ent types (%s, %s)", prevEnt.EntTypeName(), entTypeName)
 	}
@@ -108,16 +119,16 @@ func CalcStorageIndexEdits(
 	var indexKeyEncoder IndexKeyEncoder
 
 	// for each index...
-	indexes := nextEnt.EntIndexes()
+	indexes := roEnt.EntIndexes()
 	for i := range indexes {
 		x := &indexes[i] // *EntIndex
 
 		if (changedFields & x.Fields) == 0 {
 			// none of the fields that this index depends on has changed
-			// fmt.Printf("[CalcStorageIndexEdits] index %s unaffected (not in changedFields)\n", x.Name)
+			// fmt.Printf("[ComputeIndexEdits] index %s unaffected (not in changedFields)\n", x.Name)
 			continue
 		}
-		// fmt.Printf("[CalcStorageIndexEdits] index %s is affected\n", x.Name)
+		// fmt.Printf("[ComputeIndexEdits] index %s is affected\n", x.Name)
 
 		isUnique := (x.Flags & EntIndexUnique) != 0
 
@@ -138,8 +149,8 @@ func CalcStorageIndexEdits(
 			nextValueKey = string(data)
 		}
 
-		// fmt.Printf("[CalcStorageIndexEdits] prevValueKey %q\n", prevValueKey)
-		// fmt.Printf("[CalcStorageIndexEdits] nextValueKey %q\n", nextValueKey)
+		// fmt.Printf("[ComputeIndexEdits] prevValueKey %q\n", prevValueKey)
+		// fmt.Printf("[ComputeIndexEdits] nextValueKey %q\n", nextValueKey)
 
 		// remove old entry
 		if prevValueKey != "" {
@@ -151,11 +162,13 @@ func CalcStorageIndexEdits(
 			}
 			var ids IdSet
 			var err error
-			ids, err = indexGet(entTypeName, x.Name, prevValueKey)
-			if err != nil {
-				return nil, err
+			if indexGet != nil {
+				ids, err = indexGet(entTypeName, x.Name, prevValueKey)
+				if err != nil {
+					return nil, err
+				}
 			}
-			if len(ids) > 0 {
+			if len(ids) > 0 || indexGet == nil {
 				if isUnique || len(ids) == 1 {
 					ids = nil
 				} else {
@@ -178,9 +191,11 @@ func CalcStorageIndexEdits(
 				ids = IdSet{id}
 			} else {
 				var err error
-				ids, err = indexGet(entTypeName, x.Name, nextValueKey)
-				if err != nil {
-					return nil, err
+				if indexGet != nil {
+					ids, err = indexGet(entTypeName, x.Name, nextValueKey)
+					if err != nil {
+						return nil, err
+					}
 				}
 				ids.Add(id)
 			}
@@ -201,7 +216,7 @@ func CalcStorageIndexEdits(
 // generated ent index lookup functions.
 
 func FindEntIdsByIndex(
-	s Storage, entTypeName string, x *EntIndex, nfields int, keyEncoder func(Encoder),
+	s Storage, entTypeName string, x *EntIndex, nfields, limit int, keyEncoder func(Encoder),
 ) ([]uint64, error) {
 	var c IndexKeyEncoder
 	c.Reset(nfields)
@@ -210,13 +225,13 @@ func FindEntIdsByIndex(
 		return nil, c.err
 	}
 	c.EndEnt()
-	return s.FindEntIdsByIndex(entTypeName, x, c.b.Bytes())
+	return s.FindEntIdsByIndex(entTypeName, x, c.b.Bytes(), limit)
 }
 
 func FindEntIdByIndex(
-	s Storage, entTypeName string, x *EntIndex, keyEncoder func(Encoder),
+	s Storage, entTypeName string, x *EntIndex, nfields int, keyEncoder func(Encoder),
 ) (uint64, error) {
-	v, err := FindEntIdsByIndex(s, entTypeName, x, 1, keyEncoder)
+	v, err := FindEntIdsByIndex(s, entTypeName, x, nfields, 1, keyEncoder)
 	if err == nil {
 		if len(v) > 0 {
 			return v[0], nil
@@ -227,7 +242,7 @@ func FindEntIdByIndex(
 }
 
 func FindEntIdByIndexKey(s Storage, entTypeName string, x *EntIndex, key []byte) (uint64, error) {
-	v, err := s.FindEntIdsByIndex(entTypeName, x, key)
+	v, err := s.FindEntIdsByIndex(entTypeName, x, key, 1)
 	if err == nil {
 		if len(v) > 0 {
 			return v[0], nil
@@ -238,7 +253,7 @@ func FindEntIdByIndexKey(s Storage, entTypeName string, x *EntIndex, key []byte)
 }
 
 func LoadEntsByIndex(
-	s Storage, e Ent, x *EntIndex, nfields int, keyEncoder func(Encoder),
+	s Storage, e Ent, x *EntIndex, nfields, limit int, keyEncoder func(Encoder),
 ) ([]Ent, error) {
 	var c IndexKeyEncoder
 	c.Reset(nfields)
@@ -247,11 +262,11 @@ func LoadEntsByIndex(
 		return nil, c.err
 	}
 	c.EndEnt()
-	return s.LoadEntsByIndex(e, x, c.b.Bytes())
+	return s.LoadEntsByIndex(e, x, c.b.Bytes(), limit)
 }
 
-func LoadEntByIndex(s Storage, e Ent, x *EntIndex, keyEncoder func(Encoder)) error {
-	v, err := LoadEntsByIndex(s, e, x, 1, keyEncoder)
+func LoadEntByIndex(s Storage, e Ent, x *EntIndex, nfields int, keyEncoder func(Encoder)) error {
+	v, err := LoadEntsByIndex(s, e, x, nfields, 1, keyEncoder)
 	if err == nil {
 		if len(v) == 0 {
 			err = ErrNotFound
@@ -264,7 +279,7 @@ func LoadEntByIndex(s Storage, e Ent, x *EntIndex, keyEncoder func(Encoder)) err
 }
 
 func LoadEntByIndexKey(s Storage, e Ent, x *EntIndex, key []byte) error {
-	v, err := s.LoadEntsByIndex(e, x, key)
+	v, err := s.LoadEntsByIndex(e, x, key, 1)
 	if err == nil {
 		if len(v) == 0 {
 			err = ErrNotFound
