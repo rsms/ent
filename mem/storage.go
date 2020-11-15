@@ -10,17 +10,17 @@ import (
 
 type Ent = ent.Ent
 
-// MemoryStorage is a generic, goroutine-safe storage implementation which maintains
+// EntStorage is a generic, goroutine-safe storage implementation of ent.Storage which maintains
 // ent data in memory, suitable for tests.
-type MemoryStorage struct {
+type EntStorage struct {
 	idgen uint64 // id generator for creating new ents
 
 	mu sync.RWMutex // protects the following fields
 	m  ScopedMap    // entkey => json
 }
 
-func NewMemoryStorage() *MemoryStorage {
-	s := &MemoryStorage{}
+func NewEntStorage() *EntStorage {
+	s := &EntStorage{}
 	s.m.m = make(map[string][]byte)
 	return s
 }
@@ -31,19 +31,19 @@ func debugTrace(format string, args ...interface{}) {
 	//fmt.Printf("TRACE "+format+"\n", args...)
 }
 
-func (s *MemoryStorage) CreateEnt(e Ent, fieldmap uint64) (id uint64, err error) {
+func (s *EntStorage) CreateEnt(e Ent, fieldmap uint64) (id uint64, err error) {
 	id = atomic.AddUint64(&s.idgen, 1)
 	err = s.putEnt(e, id, 1, fieldmap)
 	return
 }
 
-func (s *MemoryStorage) SaveEnt(e Ent, fieldmap uint64) (nextVersion uint64, err error) {
+func (s *EntStorage) SaveEnt(e Ent, fieldmap uint64) (nextVersion uint64, err error) {
 	nextVersion = e.Version() + 1
 	err = s.putEnt(e, e.Id(), nextVersion, fieldmap)
 	return
 }
 
-func (s *MemoryStorage) LoadEntById(e Ent, id uint64) (version uint64, err error) {
+func (s *EntStorage) LoadEntById(e Ent, id uint64) (version uint64, err error) {
 	key := s.entKey(e.EntTypeName(), id)
 	s.mu.RLock()
 	data := s.m.Get(key)
@@ -51,7 +51,7 @@ func (s *MemoryStorage) LoadEntById(e Ent, id uint64) (version uint64, err error
 	return s.loadEnt(e, data)
 }
 
-func (s *MemoryStorage) loadEnt(e Ent, data []byte) (version uint64, err error) {
+func (s *EntStorage) loadEnt(e Ent, data []byte) (version uint64, err error) {
 	if data == nil {
 		err = ent.ErrNotFound
 		return
@@ -60,7 +60,7 @@ func (s *MemoryStorage) loadEnt(e Ent, data []byte) (version uint64, err error) 
 	return
 }
 
-func (s *MemoryStorage) DeleteEnt(e Ent) error {
+func (s *EntStorage) DeleteEnt(e Ent) error {
 	key := s.entKey(e.EntTypeName(), e.Id())
 	s.mu.Lock()
 	ok := s.m.Get(key) != nil
@@ -72,7 +72,7 @@ func (s *MemoryStorage) DeleteEnt(e Ent) error {
 	return nil
 }
 
-func (s *MemoryStorage) putEnt(e Ent, id, version, changedFields uint64) error {
+func (s *EntStorage) putEnt(e Ent, id, version, changedFields uint64) error {
 	debugTrace("putEnt ent %q id=%d version=%d fieldmap=%b",
 		e.EntTypeName(), id, version, changedFields)
 
@@ -116,7 +116,7 @@ func (s *MemoryStorage) putEnt(e Ent, id, version, changedFields uint64) error {
 	}
 
 	// update indexes
-	indexEdits, err := ent.CalcStorageIndexEdits(s.indexGet, e, prevEnt, id, changedFields)
+	indexEdits, err := ent.ComputeIndexEdits(s.indexGet, e, prevEnt, id, changedFields)
 	if err != nil {
 		return err
 	}
@@ -143,15 +143,19 @@ func (s *MemoryStorage) putEnt(e Ent, id, version, changedFields uint64) error {
 	return nil
 }
 
-func (s *MemoryStorage) FindEntIdsByIndex(
-	entTypeName string, x *ent.EntIndex, key []byte,
+func (s *EntStorage) FindEntIdsByIndex(
+	entTypeName string, x *ent.EntIndex, key []byte, limit int,
 ) ([]uint64, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.indexGet(entTypeName, x.Name, string(key))
+	ids, err := s.indexGet(entTypeName, x.Name, string(key))
+	limitIds(&ids, limit)
+	return ids, err
 }
 
-func (s *MemoryStorage) LoadEntsByIndex(e Ent, x *ent.EntIndex, key []byte) ([]Ent, error) {
+func (s *EntStorage) LoadEntsByIndex(
+	e Ent, x *ent.EntIndex, key []byte, limit int,
+) ([]Ent, error) {
 	//
 	// TODO: document the following thing somewhere, maybe in ent.Storage:
 	//
@@ -171,6 +175,7 @@ func (s *MemoryStorage) LoadEntsByIndex(e Ent, x *ent.EntIndex, key []byte) ([]E
 		}
 		return nil, nil
 	}
+	limitIds(&ids, limit)
 	ents := make([]Ent, len(ids))
 	for i, id := range ids {
 		e2 := e
@@ -187,7 +192,13 @@ func (s *MemoryStorage) LoadEntsByIndex(e Ent, x *ent.EntIndex, key []byte) ([]E
 	return ents, nil
 }
 
-func (s *MemoryStorage) indexGet(entTypeName, indexName, key string) ([]uint64, error) {
+func limitIds(ids *[]uint64, limit int) {
+	if limit > 0 && limit < len(*ids) {
+		*ids = (*ids)[:limit]
+	}
+}
+
+func (s *EntStorage) indexGet(entTypeName, indexName, key string) ([]uint64, error) {
 	value := s.m.Get(s.indexKey(entTypeName, indexName, key))
 	if len(value) == 0 {
 		return nil, nil
@@ -195,11 +206,11 @@ func (s *MemoryStorage) indexGet(entTypeName, indexName, key string) ([]uint64, 
 	return ent.ParseIdSet(value), nil
 }
 
-func (s *MemoryStorage) indexKey(entTypeName, indexName, key string) string {
+func (s *EntStorage) indexKey(entTypeName, indexName, key string) string {
 	return entTypeName + "#" + indexName + ":" + key
 }
 
-func (s *MemoryStorage) entKey(entTypeName string, id uint64) string {
+func (s *EntStorage) entKey(entTypeName string, id uint64) string {
 	if id == 0 {
 		panic("zero id")
 	}
