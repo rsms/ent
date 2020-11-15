@@ -60,7 +60,7 @@ func (e *Account) MarshalJSON() ([]byte, error) {
 // }
 
 func main() {
-	estore := mem.NewMemoryStorage()
+	estore := mem.NewEntStorage()
 
 	ids, _ := FindAccountByEmail(estore, "bob@bob.com")
 	fmt.Printf("FindAccountByEmail bob@bob.com => %v\n", ids)
@@ -100,7 +100,7 @@ func main() {
 	fmt.Printf("loaded account by email %q: %+v\n", "bob@bob.com", a1c)
 
 	ids1, _ := FindAccountByEmail(estore, "bob@bob.com")
-	ids2, _ := FindAccountBySize(estore, 0, 0)
+	ids2, _ := FindAccountBySize(estore, 0, 0, -1)
 	fmt.Printf("FindAccountByEmail bob@bob.com => %v\n", ids1)
 	fmt.Printf("FindAccountBySize 0x0 => %v\n", ids2)
 
@@ -117,8 +117,8 @@ func main() {
 	fmt.Printf("indexLookup email bob@bob.com   => %v\n", ids3)
 	fmt.Printf("indexLookup email bobby@bob.com => %v\n", ids4)
 
-	ids5, _ := FindAccountBySize(estore, 0, 0)
-	ids6, _ := FindAccountBySize(estore, 100, 0)
+	ids5, _ := FindAccountBySize(estore, 0, 0, -1)
+	ids6, _ := FindAccountBySize(estore, 100, 0, -1)
 	fmt.Printf("FindAccountBySize 0x0   => %v\n", ids5)
 	fmt.Printf("FindAccountBySize 100x0 => %v\n", ids6)
 

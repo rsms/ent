@@ -30,53 +30,53 @@ func FindAccountByEmail(s ent.Storage, email string) (uint64, error) {
 }
 
 // LoadAccountByFlag loads all Account ents with flag
-func LoadAccountByFlag(s ent.Storage, flag uint16) ([]*Account, error) {
+func LoadAccountByFlag(s ent.Storage, flag uint16, limit int) ([]*Account, error) {
 	e := &Account{}
-	r, err := ent.LoadEntsByIndex(s, e, &ent_Account_idx[1], 1, func(c ent.Encoder) {
+	r, err := ent.LoadEntsByIndex(s, e, &ent_Account_idx[1], 1, limit, func(c ent.Encoder) {
 		c.Uint(uint64(flag), 16)
 	})
 	return ent_Account_slice_cast(r), err
 }
 
 // FindAccountByFlag looks up Account ids with flag
-func FindAccountByFlag(s ent.Storage, flag uint16) ([]uint64, error) {
-	return ent.FindEntIdsByIndex(s, "account", &ent_Account_idx[1], 1, func(c ent.Encoder) {
+func FindAccountByFlag(s ent.Storage, flag uint16, limit int) ([]uint64, error) {
+	return ent.FindEntIdsByIndex(s, "account", &ent_Account_idx[1], 1, limit, func(c ent.Encoder) {
 		c.Uint(uint64(flag), 16)
 	})
 }
 
 // LoadAccountByPicture loads all Account ents with picture
-func LoadAccountByPicture(s ent.Storage, picture []byte) ([]*Account, error) {
+func LoadAccountByPicture(s ent.Storage, picture []byte, limit int) ([]*Account, error) {
 	e := &Account{}
-	r, err := s.LoadEntsByIndex(e, &ent_Account_idx[2], picture)
+	r, err := s.LoadEntsByIndex(e, &ent_Account_idx[2], picture, limit)
 	return ent_Account_slice_cast(r), err
 }
 
 // FindAccountByPicture looks up Account ids with picture
-func FindAccountByPicture(s ent.Storage, picture []byte) ([]uint64, error) {
-	return s.FindEntIdsByIndex("account", &ent_Account_idx[2], picture)
+func FindAccountByPicture(s ent.Storage, picture []byte, limit int) ([]uint64, error) {
+	return s.FindEntIdsByIndex("account", &ent_Account_idx[2], picture, limit)
 }
 
 // LoadAccountByScore loads all Account ents with score
-func LoadAccountByScore(s ent.Storage, score float32) ([]*Account, error) {
+func LoadAccountByScore(s ent.Storage, score float32, limit int) ([]*Account, error) {
 	e := &Account{}
-	r, err := ent.LoadEntsByIndex(s, e, &ent_Account_idx[3], 1, func(c ent.Encoder) {
+	r, err := ent.LoadEntsByIndex(s, e, &ent_Account_idx[3], 1, limit, func(c ent.Encoder) {
 		c.Float(float64(score), 32)
 	})
 	return ent_Account_slice_cast(r), err
 }
 
 // FindAccountByScore looks up Account ids with score
-func FindAccountByScore(s ent.Storage, score float32) ([]uint64, error) {
-	return ent.FindEntIdsByIndex(s, "account", &ent_Account_idx[3], 1, func(c ent.Encoder) {
+func FindAccountByScore(s ent.Storage, score float32, limit int) ([]uint64, error) {
+	return ent.FindEntIdsByIndex(s, "account", &ent_Account_idx[3], 1, limit, func(c ent.Encoder) {
 		c.Float(float64(score), 32)
 	})
 }
 
 // LoadAccountBySize loads all Account ents matching width AND height
-func LoadAccountBySize(s ent.Storage, width, height int) ([]*Account, error) {
+func LoadAccountBySize(s ent.Storage, width, height int, limit int) ([]*Account, error) {
 	e := &Account{}
-	r, err := ent.LoadEntsByIndex(s, e, &ent_Account_idx[4], 2, func(c ent.Encoder) {
+	r, err := ent.LoadEntsByIndex(s, e, &ent_Account_idx[4], 2, limit, func(c ent.Encoder) {
 		c.Key("w")
 		c.Int(int64(width), 64)
 		c.Key("h")
@@ -86,8 +86,8 @@ func LoadAccountBySize(s ent.Storage, width, height int) ([]*Account, error) {
 }
 
 // FindAccountBySize looks up Account ids matching width AND height
-func FindAccountBySize(s ent.Storage, width, height int) ([]uint64, error) {
-	return ent.FindEntIdsByIndex(s, "account", &ent_Account_idx[4], 2, func(c ent.Encoder) {
+func FindAccountBySize(s ent.Storage, width, height int, limit int) ([]uint64, error) {
+	return ent.FindEntIdsByIndex(s, "account", &ent_Account_idx[4], 2, limit, func(c ent.Encoder) {
 		c.Key("w")
 		c.Int(int64(width), 64)
 		c.Key("h")
@@ -98,7 +98,7 @@ func FindAccountBySize(s ent.Storage, width, height int) ([]uint64, error) {
 // LoadAccountByUuid loads Account with uuid_
 func LoadAccountByUuid(s ent.Storage, uuid_ uuid.UUID) (*Account, error) {
 	e := &Account{}
-	err := ent.LoadEntByIndex(s, e, &ent_Account_idx[5], func(c ent.Encoder) {
+	err := ent.LoadEntByIndex(s, e, &ent_Account_idx[5], 1, func(c ent.Encoder) {
 		c.Blob(uuid_[:])
 	})
 	return e, err
@@ -106,7 +106,7 @@ func LoadAccountByUuid(s ent.Storage, uuid_ uuid.UUID) (*Account, error) {
 
 // FindAccountByUuid looks up Account id with uuid_
 func FindAccountByUuid(s ent.Storage, uuid_ uuid.UUID) (uint64, error) {
-	return ent.FindEntIdByIndex(s, "account", &ent_Account_idx[5], func(c ent.Encoder) {
+	return ent.FindEntIdByIndex(s, "account", &ent_Account_idx[5], 1, func(c ent.Encoder) {
 		c.Blob(uuid_[:])
 	})
 }
