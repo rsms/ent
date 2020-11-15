@@ -27,15 +27,15 @@ func FindAccountByEmail(s ent.Storage, email string) (uint64, error) {
 }
 
 // LoadAccountByName loads all Account ents with name
-func LoadAccountByName(s ent.Storage, name string) ([]*Account, error) {
+func LoadAccountByName(s ent.Storage, name string, limit int) ([]*Account, error) {
 	e := &Account{}
-	r, err := s.LoadEntsByIndex(e, &ent_Account_idx[1], []byte(name))
+	r, err := s.LoadEntsByIndex(e, &ent_Account_idx[1], []byte(name), limit)
 	return ent_Account_slice_cast(r), err
 }
 
 // FindAccountByName looks up Account ids with name
-func FindAccountByName(s ent.Storage, name string) ([]uint64, error) {
-	return s.FindEntIdsByIndex("account", &ent_Account_idx[1], []byte(name))
+func FindAccountByName(s ent.Storage, name string, limit int) ([]uint64, error) {
+	return s.FindEntIdsByIndex("account", &ent_Account_idx[1], []byte(name), limit)
 }
 
 // EntTypeName returns the ent's storage name ("account")
