@@ -25,19 +25,25 @@ type RReader struct {
 // Err returns the error state of the reader
 func (r *RReader) Err() error { return r.err }
 
+func (r *RReader) SetErr(err error) {
+	if r.err == nil {
+		r.err = err
+	}
+}
+
 // ListHeader reads an array header, returning the number of elements that follows.
 // Returns -1 to signal "nil array" and 0 signals "empty array" since the RESP protocol
 // makes that distinction (though Go does not.)
 func (r *RReader) ListHeader() int {
 	if r.err == nil {
-		t, b := r.readNext()
+		t, b := r.readNext(nil)
 		if t == RESPTypeArray {
 			var i int64
 			if r.err == nil {
 				i, r.err = parseInt(b)
 			}
 			return int(i)
-		} else {
+		} else if r.err == nil {
 			r.err = errors.New("not an array")
 		}
 	}
@@ -46,7 +52,7 @@ func (r *RReader) ListHeader() int {
 
 func (r *RReader) DictHeader() int {
 	// TODO add support for reading embedded dicts
-	r.err = errors.New("dicts not supported")
+	r.SetErr(errors.New("dicts not supported"))
 	return 0
 }
 
@@ -96,7 +102,7 @@ func (r *RReader) Bool() bool {
 	if r.err != nil {
 		return false
 	}
-	_, b := r.readNextDiscardArray()
+	_, b := r.readNextDiscardArray(nil)
 	return len(b) > 0 && b[0] != '0'
 }
 
@@ -104,7 +110,7 @@ func (r *RReader) Bool() bool {
 func (r *RReader) Int(bitsize int) int64 {
 	var i int64
 	if r.err == nil {
-		_, b := r.readNextDiscardArray()
+		_, b := r.readNextDiscardArray(nil)
 		if r.err == nil {
 			i, r.err = parseInt(b)
 		}
@@ -116,7 +122,7 @@ func (r *RReader) Int(bitsize int) int64 {
 func (r *RReader) Uint(bitsize int) uint64 {
 	var u uint64
 	if r.err == nil {
-		_, b := r.readNextDiscardArray()
+		_, b := r.readNextDiscardArray(nil)
 		if r.err == nil {
 			u, r.err = parseUint(b)
 		}
@@ -127,7 +133,7 @@ func (r *RReader) Uint(bitsize int) uint64 {
 func (r *RReader) HexUint(bitsize int) uint64 {
 	var u uint64
 	if r.err == nil {
-		_, b := r.readNextDiscardArray()
+		_, b := r.readNextDiscardArray(nil)
 		if r.err == nil {
 			u, r.err = parseHexUint(b)
 		}
@@ -139,7 +145,7 @@ func (r *RReader) HexUint(bitsize int) uint64 {
 func (r *RReader) Float(bitsize int) float64 {
 	var f float64
 	if r.err == nil {
-		_, b := r.readNextDiscardArray()
+		_, b := r.readNextDiscardArray(nil)
 		if r.err == nil {
 			f, r.err = strconv.ParseFloat(string(b), bitsize)
 		}
@@ -152,7 +158,7 @@ func (r *RReader) Float(bitsize int) float64 {
 // To read the next message's content as a string regardless of its type, use `string(r.Bytes())`
 func (r *RReader) Str() string {
 	if r.err == nil {
-		t, b := r.readNextDiscardArray()
+		t, b := r.readNextDiscardArray(nil)
 		if t == RESPTypeSimpleString || t == RESPTypeBulkString {
 			return string(b)
 		}
@@ -160,10 +166,17 @@ func (r *RReader) Str() string {
 	return ""
 }
 
-// Blob reads the next message (uninterpreted)
+// Blob reads the next message uninterpreted.
 func (r *RReader) Blob() []byte {
+	return r.AnyData(nil)
+}
+
+// AnyData reads the next message uninterpreted.
+// If buf is not nil, it is used for reading the data and a slice of it is returned. If buf is
+// nil or its cap is less than needed, a new byte array is allocated.
+func (r *RReader) AnyData(buf []byte) []byte {
 	if r.err == nil {
-		_, b := r.readNextDiscardArray()
+		_, b := r.readNextDiscardArray(buf)
 		return b
 	}
 	return nil
@@ -172,7 +185,7 @@ func (r *RReader) Blob() []byte {
 // Scalar reads any scalar value. Compound types like arrays are skipped & discarded.
 func (r *RReader) Scalar() (typ RESPType, data []byte) {
 	if r.err == nil {
-		typ, data = r.readNextDiscardArray()
+		typ, data = r.readNextDiscardArray(nil)
 	}
 	return
 }
@@ -187,7 +200,7 @@ func (r *RReader) AppendBlob(buf []byte) []byte {
 		// optimization for bulk strings
 		z, err := readIntLine(r.r)
 		if err != nil {
-			r.err = err
+			r.SetErr(err)
 			return nil
 		}
 		if z < 1 {
@@ -207,25 +220,23 @@ func (r *RReader) AppendBlob(buf []byte) []byte {
 	}
 	// other messages types that are not "bulk string"
 	r.r.UnreadByte()
-	_, b := r.readNextDiscardArray()
+	_, b := r.readNextDiscardArray(nil)
 	if b == nil {
 		return buf
 	}
 	return append(buf, b...)
 }
 
-func (r *RReader) Any(dstptr interface{}) {
-	r.Next()
-	// TODO
-}
-
 // Next is a low-level read function which reads whatever RESP message comes next, without
 // and interpretation. Note that in the case typ is RESPTypeArray the caller is responsible for
 // reading ParseInt(data) more messages (array elements) to uphold the read stream integrity.
 // When typ==RESPTypeError, r.Err() is set to reflect the error message.
-func (r *RReader) Next() (typ RESPType, data []byte) {
+// buf is optional.
+// If nil new buffers are allocated for the response (data), else buf is used for data if it's
+// large enough.
+func (r *RReader) Next(buf []byte) (typ RESPType, data []byte) {
 	if r.err == nil {
-		typ, data = r.readNext()
+		typ, data = r.readNext(buf)
 	}
 	return
 }
@@ -239,7 +250,9 @@ func (r *RReader) Next() (typ RESPType, data []byte) {
 //   '$' bulk string
 //   '*' array header
 //
-func (r *RReader) readNext() (typ RESPType, data []byte) {
+// Assumes that r.err==nil
+//
+func (r *RReader) readNext(buf []byte) (typ RESPType, data []byte) {
 	typ, _ = r.r.ReadByte()
 	if typ == RESPTypeBulkString {
 		// bulk string, e.g. "$5\r\nhello\r\n" or "$-1\r\n" (nil)
@@ -253,7 +266,11 @@ func (r *RReader) readNext() (typ RESPType, data []byte) {
 				_, r.err = r.r.Discard(2) // \r\n
 			} // else: nil, i.e. "$-1\r\n"
 		} else {
-			data = make([]byte, z)
+			if cap(buf) >= int(z) {
+				data = buf[:z]
+			} else {
+				data = make([]byte, z)
+			}
 			if !r.readBytes(data) {
 				data = nil
 			}
@@ -299,8 +316,8 @@ func (r *RReader) Discard() {
 
 // readNextDiscardArray is like readNext but in the case of an array header, reads & discards
 // all array items.
-func (r *RReader) readNextDiscardArray() (typ RESPType, data []byte) {
-	typ, data = r.readNext()
+func (r *RReader) readNextDiscardArray(buf []byte) (typ RESPType, data []byte) {
+	typ, data = r.readNext(buf)
 	if typ == RESPTypeArray {
 		r.discardArrayElements(data)
 	}

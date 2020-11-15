@@ -4,16 +4,25 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
+	"sync"
 
 	"github.com/mediocregopher/radix/v3"
 	"github.com/rsms/ent"
 	"github.com/rsms/go-bits"
 )
 
+func debugTrace(format string, args ...interface{}) {
+	// The Go compiler will strip all invocations of debugTrace when the function body is empty.
+	// (un)comment the next line to toggle debug trace logging:
+	//fmt.Printf("TRACE "+format+"\n", args...)
+}
+
 type Ent = ent.Ent
 
 type EntStorage struct {
-	r *Redis
+	r              *Redis
+	backgroundJobs sync.WaitGroup
 }
 
 func NewEntStorage(r *Redis) *EntStorage {
@@ -22,10 +31,17 @@ func NewEntStorage(r *Redis) *EntStorage {
 	}
 }
 
-func debugTrace(format string, args ...interface{}) {
-	// The Go compiler will strip all invocations of debugTrace when the function body is empty.
-	// (un)comment the next line to toggle debug trace logging:
-	fmt.Printf("TRACE "+format+"\n", args...)
+func (s *EntStorage) Close() error {
+	s.backgroundJobs.Wait()
+	return nil
+}
+
+func (s *EntStorage) goBackground(f func()) {
+	s.backgroundJobs.Add(1)
+	go func() {
+		defer s.backgroundJobs.Done()
+		f()
+	}()
 }
 
 // LoadEntById is part of the ent.Storage interface, used by LoadTYPEById()
@@ -56,25 +72,15 @@ func (s *EntStorage) makeEntLoadCmd(e Ent, id uint64, versionOut *uint64) *RCmd 
 }
 
 // FindEntIdsByIndex is part of the ent.Storage interface, used by FindTYPEByINDEX
-func (s *EntStorage) FindEntIdsByIndex(entType string, x *ent.EntIndex, key []byte,
+func (s *EntStorage) FindEntIdsByIndex(
+	entType string, x *ent.EntIndex, key []byte, limit int,
 ) (ids []uint64, err error) {
 	indexKey := makeIndexKey(entType, x, key)
 	debugTrace("FindEntIdsByIndex %s.%s %q indexKey=%q", entType, x.Name, key, indexKey)
 
 	if x.IsUnique() {
 		var id uint64
-		cmd := &RCmd{
-			func(w *RIOWriter) error {
-				w.ArrayHeader(2)
-				w.buf = respAppendBulkString(w.buf, []byte("GET"))
-				w.buf = respAppendBulkString(w.buf, indexKey)
-				return nil
-			},
-			func(r *RReader) error {
-				id = r.HexUint(64)
-				return nil
-			},
-		}
+		cmd := makeGETEntIdCmd(indexKey, &id)
 		if err := s.r.doRead(cmd); err != nil {
 			return nil, err
 		}
@@ -85,17 +91,21 @@ func (s *EntStorage) FindEntIdsByIndex(entType string, x *ent.EntIndex, key []by
 		return
 	}
 
-	debugTrace("TODO LoadEntsByIndex non-unique")
-	// lookup: ZRANGEBYLEX "type#index" "[alan@bob.com\xff" +
+	// ZRANGEBYLEX "type#index" "[value\xfe" "(value\xff"
+	cmd := makeZRangeEntIdsCmd(indexKey, key, limit)
+	err = s.r.doRead(cmd)
+	ids = cmd.Result
 	return
 }
 
 // LoadEntsByIndex is part of the ent.Storage interface, used by LoadTYPEByINDEX
-func (s *EntStorage) LoadEntsByIndex(e Ent, x *ent.EntIndex, key []byte) ([]Ent, error) {
+func (s *EntStorage) LoadEntsByIndex(
+	e Ent, x *ent.EntIndex, key []byte, limit int,
+) ([]Ent, error) {
 	entType := e.EntTypeName()
 	debugTrace("LoadEntsByIndex %s.%s %q", entType, x.Name, key)
 
-	ids, err := s.FindEntIdsByIndex(entType, x, key)
+	ids, err := s.FindEntIdsByIndex(entType, x, key, limit)
 	if err != nil || len(ids) == 0 {
 		// Note: for x.IsUnique(), FindEntIdsByIndex returns ErrNotFound in case nothing is found
 		return nil, err
@@ -159,15 +169,23 @@ func (s *EntStorage) putEnt(e ent.Ent, id, prevVersion, nextVersion, fieldmap ui
 		return err
 	}
 
-	// commands to be run inside a MULTI (pipelined)
+	// cmds holds all "write" commands, to be run inside a MULTI (pipelined)
 	cmds := make([]radix.CmdAction, 2, 16) // commands to perform in MULTI
 	cmds[0] = &CmdMULTI
 	cmds[1] = &RawCmd{respData}
 
+	// // addCmd appends cmd to cmds
+	// addCmd := func(cmd *RawCmd) {
+	// 	cmds = append(cmds, cmd)
+	// }
+
+	// watchKeys contains all keys watched
+	watchKeys := make([][]byte, 1, 16)
+	watchKeys[0] = entKey
+
 	// begin redis communication
 	err = s.r.Batch(func(c radix.Conn) (err error) {
-		ok := false           // set to true just before EXEC is issued
-		multiStarted := false // true after MULTI has been issued
+		ok := false
 
 		// WATCH the ent entry key for changes by other clients (e.g. "typename:id")
 		debugTrace(">> WATCH %s", entKey)
@@ -175,13 +193,9 @@ func (s *EntStorage) putEnt(e ent.Ent, id, prevVersion, nextVersion, fieldmap ui
 			return
 		}
 
-		// DISCARD & UNWATCH in case of error
+		// UNWATCH in case of error
 		defer func() {
 			if !ok {
-				if multiStarted {
-					debugTrace(">> DISCARD")
-					c.Do(&CmdDISCARD)
-				}
 				// Note: EXEC implicitly UNWATCH'es
 				debugTrace(">> UNWATCH")
 				c.Do(&CmdUNWATCH)
@@ -208,76 +222,34 @@ func (s *EntStorage) putEnt(e ent.Ent, id, prevVersion, nextVersion, fieldmap ui
 		}
 
 		// update indexes
-		indexGet := func(entTypeName, indexName, key string) ([]uint64, error) {
-			// Dummy index reader which always return ids.
-			// Since we use Redis Z and H for indexes, we don't need to load the current value.
-			// Thus, we ignore StorageIndexEdit.Value
-			return []uint64{0}, nil
+		err = s.computeIndexEdits(e, currEnt, id, fieldmap, &cmds, &watchKeys,
+			func(key []byte, cmd radix.CmdAction) error {
+				// Perform command right now. We watch the key since
+				debugTrace(">> WATCH %s; %+v", key, cmd)
+				return c.Do(radix.Pipeline(makeSingleKeyCmd("WATCH", key), cmd))
+			})
+
+		// prepend watch to cmds, skipping the first that we issued separately
+		if len(watchKeys) > 1 {
+			cmds2 := make([]radix.CmdAction, len(cmds)+1, len(cmds)+2) // extra space for WATCH and EXEC
+			cmds2[0] = makeBulkStringCmd("WATCH", watchKeys...)
+			for i := 1; i < len(cmds); i++ {
+				for i, cmd := range cmds {
+					cmds2[i+1] = cmd
+				}
+			}
+			cmds = cmds2
 		}
-		indexEdits, err := ent.CalcStorageIndexEdits(indexGet, e, currEnt, id, fieldmap)
-		if err != nil {
-			return err
-		}
 
-		// debugTrace("indexEdits: %+v", indexEdits)
-		for _, ed := range indexEdits {
-			indexKey := makeIndexKey(entType, ed.Index, []byte(ed.Key))
-
-			// WATCH unique index keys
-			if ed.Index.IsUnique() {
-				debugTrace(">> WATCH %s", indexKey)
-				if err = c.Do(makeSingleKeyCmd("WATCH", indexKey)); err != nil {
-					return
-				}
-			}
-
-			if ed.IsCleanup {
-				if ed.Index.IsUnique() {
-					// DEL "foo#email:robin@gmail.com"
-					// Note: DEL returns an integer of the number of entries deleted (0 or 1) but we
-					// don't care about that.
-					cmds = append(cmds, makeSingleKeyCmd("DEL", indexKey))
-				} else {
-					// ZREM foo#email 0 "robin@gmail.com\xff123"
-					cmds = append(cmds, makeZREMIdCmd(indexKey, []byte(ed.Key), id))
-				}
-				continue
-			}
-			// case !ed.IsCleanup
-			if ed.Index.IsUnique() {
-				var existingId uint64
-				err := c.Do(radix.FlatCmd(&existingId, "GET", string(indexKey)))
-				if err != nil {
-					return err
-				}
-				if existingId == 0 {
-					cmds = append(cmds, makeSETNXIdCmd(indexKey, id))
-				} else if existingId != id {
-					return fmt.Errorf("unique index conflict %s.%s", entType, ed.Index.Name)
-				}
-			} else {
-				// entry:  ZADD email 0 "alan@bob.com\xffid"
-				// lookup: ZRANGEBYLEX email "[alan@bob.com\xff" +
-				// remove: ZREM email 0 "cat@bob.com\xffid"
-				cmds = append(cmds, makeZADDIdCmd(indexKey, []byte(ed.Key), id))
-			}
-		} // end of update index
+		// finally, append EXEC to cmds
+		cmds = append(cmds, &CmdEXEC)
 
 		// Perform cmds pipelined, meaning all commands are sent in one go, then all responses are
 		// read in one go, instead of write,read,write,read...
 		// First cmd is MULTI.
-		for _, a := range cmds {
-			debugTrace(">> %v", a)
-		}
-		multiStarted = true
+		debugTrace(">> %s", strings.ReplaceAll(fmt.Sprintf("%+v", cmds), "RawCmd[", "\n  RawCmd["))
 		err = c.Do(radix.Pipeline(cmds...))
-
-		// EXEC
-		if err == nil {
-			debugTrace(">> EXEC")
-			ok = true
-			err = c.Do(&CmdEXEC)
-		}
+		ok = err == nil
 		return
 	}) // s.r.Batch
 
@@ -290,15 +262,144 @@ func (s *EntStorage) putEnt(e ent.Ent, id, prevVersion, nextVersion, fieldmap ui
 		return err
 	}
 
+	// If we use a separate reader redis server, write-through by applying the cmds locally.
+	// This ensures immediate consistency, for example if the caller tries to load the ent
+	// immediately after creating it.
+	if s.r.RClient() != s.r.WClient() {
+		s.goBackground(func() {
+			// debugTrace("RClient >> %s",
+			// 	strings.ReplaceAll(fmt.Sprintf("%+v", cmds), "RawCmd[", "\n  RawCmd["))
+			err := s.r.RClient().Do(radix.Pipeline(cmds...))
+			// debugTrace("RClient result => %v", err)
+			// Fail with a warning; in case this fails the data is eventually consistent.
+			// It is also possible that the replication won the race.
+			if err != nil && s.r.Logger != nil {
+				s.r.Logger.Warn("write-through cache failure %v", err)
+			}
+		})
+	}
+
 	return nil
 }
 
 // DeleteEnt is part of the ent.Storage interface, used by TYPE.PermanentlyDelete()
 func (s *EntStorage) DeleteEnt(e ent.Ent) error {
-	entKey := makeEntKey(e.EntTypeName(), e.Id())
-	debugTrace("DEL %s", entKey)
-	cmd := makeSingleKeyCmd("DEL", entKey)
-	return s.r.doWriteIdempotent(cmd)
+	id := e.Id()
+	entType := e.EntTypeName()
+	if id == 0 {
+		return fmt.Errorf("attempt to delete non-existing %s (id 0)", entType)
+	}
+
+	entKey := makeEntKey(entType, id)
+	debugTrace("DeleteEnt #%d %s", e.Id(), entKey)
+
+	// redis commands to be executed
+	cmds := make([]radix.CmdAction, 3, 16)
+	// cmds[0] = WATCH
+	cmds[1] = &CmdMULTI
+	cmds[2] = makeSingleKeyCmd("DEL", entKey)
+
+	// indexes
+	indexes := e.EntIndexes()
+	if len(indexes) == 0 {
+		cmds = cmds[2:]
+	} else {
+		watchKeys := make([][]byte, 1, 16)
+		watchKeys[0] = entKey
+
+		// compute index cleanup
+		err := s.computeIndexEdits(nil, e, id, e.EntFields().Fieldmap, &cmds, &watchKeys, nil)
+		if err != nil {
+			return err
+		}
+
+		cmds[0] = makeBulkStringCmd("WATCH", watchKeys...)
+		cmds = append(cmds, &CmdEXEC)
+	}
+
+	debugTrace(">> %s",
+		strings.ReplaceAll(fmt.Sprintf("%+v", cmds), "RawCmd[", "\n  RawCmd["))
+
+	err := s.r.WClient().Do(radix.Pipeline(cmds...))
+	if err != nil {
+		return err
+	}
+
+	if s.r.WClient() != s.r.RClient() {
+		// update write-through cache
+		s.goBackground(func() {
+			// debugTrace("RClient >> %s",
+			// 	strings.ReplaceAll(fmt.Sprintf("%+v", cmds), "RawCmd[", "\n  RawCmd["))
+			err := s.r.RClient().Do(radix.Pipeline(cmds...))
+			if err != nil && s.r.Logger != nil {
+				s.r.Logger.Warn("write-through cache failure %v", err)
+			}
+		})
+	}
+
+	return nil
+}
+
+func (s *EntStorage) computeIndexEdits(
+	nextEnt, prevEnt Ent,
+	id, fieldmap uint64,
+	cmdsPtr *[]radix.CmdAction,
+	watchKeysPtr *[][]byte,
+	doNow func(key []byte, cmd radix.CmdAction) error, // only needed when nextEnt!=nil
+) error {
+	indexEdits, err := ent.ComputeIndexEdits(nil, nextEnt, prevEnt, id, fieldmap)
+	if err != nil {
+		return err
+	}
+
+	cmds := *cmdsPtr
+	watchKeys := *watchKeysPtr
+
+	var entType string
+	if nextEnt != nil {
+		entType = nextEnt.EntTypeName()
+	} else {
+		entType = prevEnt.EntTypeName()
+	}
+
+	// debugTrace("indexEdits: %+v", indexEdits)
+	for _, ed := range indexEdits {
+		indexKey := makeIndexKey(entType, ed.Index, []byte(ed.Key))
+		if ed.IsCleanup {
+			if ed.Index.IsUnique() {
+				// DEL "foo#email:robin@gmail.com"
+				// Note: DEL returns an integer of the number of entries deleted (0 or 1) but we
+				// don't care about that.
+				cmds = append(cmds, makeSingleKeyCmd("DEL", indexKey))
+			} else {
+				// ZREM foo#email 0 "robin@gmail.com\xfe123"
+				cmds = append(cmds, makeZREMIdCmd(indexKey, []byte(ed.Key), id))
+			}
+		} else {
+			if ed.Index.IsUnique() {
+				// WATCH unique index keys
+				watchKeys = append(watchKeys, indexKey)
+				var existingId uint64
+				GETEntId := makeGETEntIdCmd(indexKey, &existingId)
+				if err := doNow(indexKey, GETEntId); err != nil {
+					return err
+				}
+				if existingId == 0 {
+					cmds = append(cmds, makeSETNXIdCmd(indexKey, id))
+				} else if existingId != id {
+					// TODO: a semantic error; something the caller can easily identify as "index conflict"
+					return fmt.Errorf("unique index conflict %s.%s with ent #%d",
+						entType, ed.Index.Name, existingId)
+				}
+			} else {
+				cmds = append(cmds, makeZADDIdCmd(indexKey, []byte(ed.Key), id))
+			}
+		}
+	} // end of update index
+
+	*cmdsPtr = cmds
+	*watchKeysPtr = watchKeys
+	return nil
 }
 
 // loadEntPartial
@@ -381,6 +482,25 @@ func makeIndexKey(entTypeName string, x *ent.EntIndex, entryKey []byte) []byte {
 		copy(b[i:], entryKey)
 	}
 	return b
+}
+
+func makeGETEntIdCmd(key []byte, idOut *uint64) *RawCmdHexUint {
+	return &RawCmdHexUint{
+		RawCmd:    RawCmd{respMakeStringArray2("GET", key)},
+		ResultPtr: idOut,
+	}
+	// return &RCmd{
+	// 	func(w *RIOWriter) error {
+	// 		w.ArrayHeader(2)
+	// 		w.buf = respAppendBulkString(w.buf, []byte("GET"))
+	// 		w.buf = respAppendBulkString(w.buf, key)
+	// 		return nil
+	// 	},
+	// 	func(r *RReader) error {
+	// 		*idOut = r.HexUint(64)
+	// 		return nil
+	// 	},
+	// }
 }
 
 // encodeEntHSET writes a HSET command on w with all fields in fieldmap for e.

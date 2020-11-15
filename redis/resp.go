@@ -132,7 +132,8 @@ func respAppendBulkStringHeader(buf []byte, length int) []byte {
 
 // valuelen is expected to be base-10 encoded length of value
 func respBulkStringLen(value, valuelen []byte) int {
-	return 1 + len(valuelen) + 2 + len(value) + 2
+	// $N\r\nV\r\n
+	return len(valuelen) + len(value) + 5
 }
 
 // expects: len(buf)>=5+len(value)+len(valuelen)
@@ -177,4 +178,68 @@ func splitRESPChunks(data []byte) [][]byte {
 		}
 	}
 	return chunks
+}
+
+func respMakeStringArray2(cmd string, key []byte) []byte {
+	var scratch [intBase10MaxLen * 2]byte
+	cmdlen := fmtint(scratch[:], uint64(len(cmd)), 10)
+	keylen := fmtint(scratch[:len(scratch)-len(cmdlen)], uint64(len(key)), 10)
+	prefix := "*2\r\n"
+
+	b := make([]byte, len(prefix)+
+		respBulkStringLen([]byte(cmd), cmdlen)+
+		respBulkStringLen(key, keylen))
+
+	i := copy(b, prefix)
+	i += respAddBulkString(b[i:], []byte(cmd), cmdlen)
+	i += respAddBulkString(b[i:], key, keylen)
+	b = b[:i]
+
+	return b
+}
+
+func respMakeStringArray(cmd string, args ...[]byte) []byte {
+	var scratch [intBase10MaxLen * 3]byte
+
+	nargs := 1 + len(args)
+	nargslen := fmtint(scratch[:], uint64(nargs), 10)
+	scratchi := len(scratch) - len(nargslen)
+	cmdlen := fmtint(scratch[:scratchi], uint64(len(cmd)), 10)
+	scratchv := scratch[:scratchi-len(cmdlen)]
+
+	// "*N\r\n" + "$N\r\nCMD\r\n" + [for each arg "$N\r\nV\r\n"]
+	totalsize := len(nargslen) + 3 + len(cmdlen) + len(cmd) + 5
+	for _, arg := range args {
+		s := fmtint(scratchv, uint64(len(arg)), 10)
+		totalsize += len(s) + len(arg) + 5
+	}
+
+	b := make([]byte, totalsize)
+	CRLF := "\r\n"
+
+	// "*N\r\n"
+	b[0] = '*'
+	i := 1
+	i += copy(b[i:], nargslen)
+	i += copy(b[i:], CRLF)
+
+	// "$N\r\nCMD\r\n"
+	b[i] = '$'
+	i++
+	i += copy(b[i:], cmdlen)
+	i += copy(b[i:], CRLF)
+	i += copy(b[i:], cmd)
+	i += copy(b[i:], CRLF)
+
+	for _, arg := range args {
+		// "$N\r\nARG\r\n"
+		b[i] = '$'
+		i++
+		i += copy(b[i:], fmtint(scratchv, uint64(len(arg)), 10))
+		i += copy(b[i:], CRLF)
+		i += copy(b[i:], arg)
+		i += copy(b[i:], CRLF)
+	}
+
+	return b
 }

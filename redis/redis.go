@@ -197,8 +197,12 @@ func (r *Redis) GetString(key string) (value string, err error) {
 
 func (r *Redis) Batch(f func(c radix.Conn) error) error {
 	// https://godoc.org/github.com/mediocregopher/radix#WithConn
-	// Note: first arg is key, used only for redis cluster
-	return r.doWrite(radix.WithConn("", f))
+	// Note: first arg is key which is only used for redis cluster
+	return r.rwc.Do(radix.WithConn("", f))
+}
+
+func (r *Redis) BatchOnRClient(f func(c radix.Conn) error) error {
+	return r.roc.Do(radix.WithConn("", f))
 }
 
 // constant commands without results
@@ -242,36 +246,98 @@ func (c *RawCmd) String() string {
 	return fmt.Sprintf("RawCmd%q", splitRESPChunks(c.Data))
 }
 
-func makeSingleKeyCmd(cmd string, key []byte) *RawCmd {
-	var scratch [20]byte // fits 2x uint32_max ("4294967295")
-	cmdlen := fmtint(scratch[:], uint64(len(cmd)), 10)
-	keylen := fmtint(scratch[:len(scratch)-len(cmdlen)], uint64(len(key)), 10)
-	prefix := "*2\r\n"
-
-	b := make([]byte, len(prefix)+
-		respBulkStringLen([]byte(cmd), cmdlen)+
-		respBulkStringLen(key, keylen))
-
-	i := copy(b, prefix)
-	i += respAddBulkString(b[i:], []byte(cmd), cmdlen)
-	i += respAddBulkString(b[i:], key, keylen)
-	b = b[:i]
-
-	return &RawCmd{b}
+type RawCmdHexUint struct {
+	RawCmd
+	ResultPtr *uint64
 }
 
-// makeZADDId creates a RawCmd{ ZADD "foo#email" 0 "alan@bob.com\xff123" }
+func (c *RawCmdHexUint) Run(conn radix.Conn) error {
+	if err := conn.Encode(c); err != nil {
+		return err
+	}
+	return conn.Decode(c)
+}
+
+func (c *RawCmdHexUint) UnmarshalRESP(r *bufio.Reader) error {
+	reader := RReader{r: r, buf: make([]byte, 0, 16)}
+	*c.ResultPtr = reader.HexUint(64)
+	return reader.Err()
+}
+
+type ZRangeEntIdsCmd struct {
+	RawCmd
+	Result    []uint64
+	prefixLen int
+}
+
+func makeZRangeEntIdsCmd(key, lookupKey []byte, limit int) *ZRangeEntIdsCmd {
+	buf := make([]byte, len(lookupKey)*2+4)
+
+	rangeStart := buf[:len(lookupKey)+2]
+	rangeStart[0] = '['
+	rangeStart[1+copy(rangeStart[1:], lookupKey)] = '\xfe'
+
+	rangeEnd := buf[len(lookupKey)+2:]
+	rangeEnd[0] = '('
+	rangeEnd[1+copy(rangeEnd[1:], lookupKey)] = '\xff'
+
+	argsa := [6][]byte{key, rangeStart, rangeEnd}
+	args := argsa[:3]
+	if limit > 0 {
+		// add "LIMIT 0 limit"
+		argsa[3] = []byte("LIMIT")
+		argsa[4] = []byte("0")
+		var scratch [intBase10MaxLen]byte
+		argsa[5] = fmtint(scratch[:], uint64(limit), 10)
+		args = argsa[:]
+	}
+
+	respData := respMakeStringArray("ZRANGEBYLEX", args...)
+	return &ZRangeEntIdsCmd{RawCmd: RawCmd{respData}, prefixLen: len(rangeStart)}
+}
+
+func (c *ZRangeEntIdsCmd) Run(conn radix.Conn) error {
+	if err := conn.Encode(c); err != nil {
+		return err
+	}
+	return conn.Decode(c)
+}
+
+func (c *ZRangeEntIdsCmd) UnmarshalRESP(r *bufio.Reader) error {
+	reader := RReader{r: r, buf: make([]byte, 0, 256)}
+	n := reader.ListHeader()
+	if n > 0 {
+		c.Result = make([]uint64, int(n))
+		// each entry is of the form "PREFIX\xfeIDIDIDID"
+		// where IDIDIDID is the id in big-endian byte order.
+		readbuf := make([]byte, c.prefixLen+8)
+		for i := 0; i < n; i++ {
+			b := reader.AnyData(readbuf)
+			u := readUint64BE(b[c.prefixLen-1:])
+			c.Result[i] = u
+		}
+	}
+	return reader.Err()
+}
+
+func makeSingleKeyCmd(cmd string, key []byte) *RawCmd {
+	return &RawCmd{respMakeStringArray2(cmd, key)}
+}
+
+func makeBulkStringCmd(cmd string, args ...[]byte) *RawCmd {
+	return &RawCmd{respMakeStringArray(cmd, args...)}
+}
+
+// makeZADDId creates a RawCmd{ ZADD "foo#email" 0 "alan@bob.com\xfeIDIDIDID" }
+// where IDIDIDID is the id in big-endian byte order.
 func makeZADDIdCmd(indexKey, valueKey []byte, id uint64) *RawCmd {
-	var scratch [16]byte
-	idstr := fmtint(scratch[:], id, 16)
-	return &RawCmd{[]byte(fmt.Sprintf(
-		"*4\r\n"+
-			"$4\r\nZADD\r\n"+
-			"$%d\r\n%s\r\n"+
-			"$1\r\n0\r\n"+
-			"$%d\r\n%s\xff%s\r\n",
-		len(indexKey), indexKey,
-		len(valueKey)+1+len(idstr), valueKey, idstr))}
+	rangeKey := make([]byte, len(valueKey)+9)
+	copy(rangeKey, valueKey)
+	rangeKey[len(valueKey)] = '\xfe'
+	writeUint64BE(rangeKey[len(valueKey)+1:], id)
+
+	buf := respMakeStringArray("ZADD", indexKey, []byte{'0'}, rangeKey)
+	return &RawCmd{buf}
 }
 
 func makeZREMIdCmd(indexKey, valueKey []byte, id uint64) *RawCmd {
@@ -282,7 +348,7 @@ func makeZREMIdCmd(indexKey, valueKey []byte, id uint64) *RawCmd {
 			"$4\r\nZREM\r\n"+
 			"$%d\r\n%s\r\n"+
 			"$1\r\n0\r\n"+
-			"$%d\r\n%s\xff%s\r\n",
+			"$%d\r\n%s\xfe%s\r\n",
 		len(indexKey), indexKey,
 		len(valueKey)+1+len(idstr), valueKey, idstr))}
 }
