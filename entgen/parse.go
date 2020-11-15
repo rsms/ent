@@ -70,6 +70,7 @@ const (
 )
 
 type EntFieldIndex struct {
+	index  int // in the generated entIndex_TYPE table
 	name   string
 	fields []*EntField
 	flags  fieldIndexFlags

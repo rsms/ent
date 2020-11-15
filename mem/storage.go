@@ -1,7 +1,6 @@
 package mem
 
 import (
-	"fmt"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -24,6 +23,12 @@ func NewMemoryStorage() *MemoryStorage {
 	s := &MemoryStorage{}
 	s.m.m = make(map[string][]byte)
 	return s
+}
+
+func debugTrace(format string, args ...interface{}) {
+	// The Go compiler will strip all invocations of debugTrace when the function body is empty.
+	// (un)comment the next line to toggle debug trace logging:
+	//fmt.Printf("TRACE "+format+"\n", args...)
 }
 
 func (s *MemoryStorage) CreateEnt(e Ent, fieldmap uint64) (id uint64, err error) {
@@ -68,7 +73,8 @@ func (s *MemoryStorage) DeleteEnt(e Ent) error {
 }
 
 func (s *MemoryStorage) putEnt(e Ent, id, version, changedFields uint64) error {
-	fmt.Printf("\n -- putEnt --\n")
+	debugTrace("putEnt ent %q id=%d version=%d fieldmap=%b",
+		e.EntTypeName(), id, version, changedFields)
 
 	// encode
 	// Note: EntFields().Fieldmap is used here instead of changedFields, since the JSON encoding
@@ -118,10 +124,10 @@ func (s *MemoryStorage) putEnt(e Ent, id, version, changedFields uint64) error {
 	for _, ed := range indexEdits {
 		key := s.indexKey(entTypeName, ed.Index.Name, ed.Key)
 		if len(ed.Value) == 0 {
-			fmt.Printf("index del %q\n", key)
+			debugTrace("index del %q", key)
 			m.Del(key)
 		} else {
-			fmt.Printf("index put %q => %v\n", key, ed.Value)
+			debugTrace("index put %q => %v", key, ed.Value)
 			m.Put(key, ent.IdSet(ed.Value).Encode())
 		}
 	}
@@ -131,22 +137,21 @@ func (s *MemoryStorage) putEnt(e Ent, id, version, changedFields uint64) error {
 	m.ApplyToOuter()
 
 	// write value
-	fmt.Printf("storage put %q => %s\n", key, json)
+	debugTrace("storage put %q => %s", key, json)
 	s.m.Put(key, json)
 	// note that s.mu is locked with deferred unlock
 	return nil
 }
 
 func (s *MemoryStorage) FindEntIdsByIndex(
-	entTypeName, indexName string,
-	key []byte,
+	entTypeName string, x *ent.EntIndex, key []byte,
 ) ([]uint64, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.indexGet(entTypeName, indexName, string(key))
+	return s.indexGet(entTypeName, x.Name, string(key))
 }
 
-func (s *MemoryStorage) LoadEntsByIndex(e Ent, indexName string, key []byte) ([]Ent, error) {
+func (s *MemoryStorage) LoadEntsByIndex(e Ent, x *ent.EntIndex, key []byte) ([]Ent, error) {
 	//
 	// TODO: document the following thing somewhere, maybe in ent.Storage:
 	//
@@ -156,12 +161,15 @@ func (s *MemoryStorage) LoadEntsByIndex(e Ent, indexName string, key []byte) ([]
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	entTypeName := e.EntTypeName()
-	ids, err := s.indexGet(entTypeName, indexName, string(key))
+	ids, err := s.indexGet(entTypeName, x.Name, string(key))
 	if err != nil {
 		return nil, err
 	}
 	if len(ids) == 0 {
-		return nil, ent.ErrNotFound
+		if x.IsUnique() {
+			return nil, ent.ErrNotFound
+		}
+		return nil, nil
 	}
 	ents := make([]Ent, len(ids))
 	for i, id := range ids {

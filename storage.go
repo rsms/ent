@@ -9,8 +9,8 @@ type Storage interface {
 	CreateEnt(e Ent, fieldmap uint64) (id uint64, err error)
 	SaveEnt(e Ent, fieldmap uint64) (version uint64, err error)
 	LoadEntById(e Ent, id uint64) (version uint64, err error)
-	FindEntIdsByIndex(entTypeName, indexName string, key []byte) (ids []uint64, err error)
-	LoadEntsByIndex(e Ent, indexName string, key []byte) ([]Ent, error)
+	FindEntIdsByIndex(entTypeName string, x *EntIndex, key []byte) (ids []uint64, err error)
+	LoadEntsByIndex(e Ent, x *EntIndex, key []byte) ([]Ent, error)
 	DeleteEnt(e Ent) error
 }
 

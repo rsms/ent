@@ -201,7 +201,7 @@ func CalcStorageIndexEdits(
 // generated ent index lookup functions.
 
 func FindEntIdsByIndex(
-	s Storage, entTypeName, indexName string, nfields int, keyEncoder func(Encoder),
+	s Storage, entTypeName string, x *EntIndex, nfields int, keyEncoder func(Encoder),
 ) ([]uint64, error) {
 	var c IndexKeyEncoder
 	c.Reset(nfields)
@@ -210,13 +210,13 @@ func FindEntIdsByIndex(
 		return nil, c.err
 	}
 	c.EndEnt()
-	return s.FindEntIdsByIndex(entTypeName, indexName, c.b.Bytes())
+	return s.FindEntIdsByIndex(entTypeName, x, c.b.Bytes())
 }
 
 func FindEntIdByIndex(
-	s Storage, entTypeName, indexName string, keyEncoder func(Encoder),
+	s Storage, entTypeName string, x *EntIndex, keyEncoder func(Encoder),
 ) (uint64, error) {
-	v, err := FindEntIdsByIndex(s, entTypeName, indexName, 1, keyEncoder)
+	v, err := FindEntIdsByIndex(s, entTypeName, x, 1, keyEncoder)
 	if err == nil {
 		if len(v) > 0 {
 			return v[0], nil
@@ -226,10 +226,8 @@ func FindEntIdByIndex(
 	return 0, err
 }
 
-func FindEntIdByIndexKey(
-	s Storage, entTypeName, indexName string, key []byte,
-) (uint64, error) {
-	v, err := s.FindEntIdsByIndex(entTypeName, indexName, key)
+func FindEntIdByIndexKey(s Storage, entTypeName string, x *EntIndex, key []byte) (uint64, error) {
+	v, err := s.FindEntIdsByIndex(entTypeName, x, key)
 	if err == nil {
 		if len(v) > 0 {
 			return v[0], nil
@@ -240,7 +238,7 @@ func FindEntIdByIndexKey(
 }
 
 func LoadEntsByIndex(
-	s Storage, e Ent, indexName string, nfields int, keyEncoder func(Encoder),
+	s Storage, e Ent, x *EntIndex, nfields int, keyEncoder func(Encoder),
 ) ([]Ent, error) {
 	var c IndexKeyEncoder
 	c.Reset(nfields)
@@ -249,11 +247,11 @@ func LoadEntsByIndex(
 		return nil, c.err
 	}
 	c.EndEnt()
-	return s.LoadEntsByIndex(e, indexName, c.b.Bytes())
+	return s.LoadEntsByIndex(e, x, c.b.Bytes())
 }
 
-func LoadEntByIndex(s Storage, e Ent, indexName string, keyEncoder func(Encoder)) error {
-	v, err := LoadEntsByIndex(s, e, indexName, 1, keyEncoder)
+func LoadEntByIndex(s Storage, e Ent, x *EntIndex, keyEncoder func(Encoder)) error {
+	v, err := LoadEntsByIndex(s, e, x, 1, keyEncoder)
 	if err == nil {
 		if len(v) == 0 {
 			err = ErrNotFound
@@ -265,8 +263,8 @@ func LoadEntByIndex(s Storage, e Ent, indexName string, keyEncoder func(Encoder)
 	return err
 }
 
-func LoadEntByIndexKey(s Storage, e Ent, indexName string, key []byte) error {
-	v, err := s.LoadEntsByIndex(e, indexName, key)
+func LoadEntByIndexKey(s Storage, e Ent, x *EntIndex, key []byte) error {
+	v, err := s.LoadEntsByIndex(e, x, key)
 	if err == nil {
 		if len(v) == 0 {
 			err = ErrNotFound
