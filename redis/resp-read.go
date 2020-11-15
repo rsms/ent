@@ -124,6 +124,17 @@ func (r *RReader) Uint(bitsize int) uint64 {
 	return u
 }
 
+func (r *RReader) HexUint(bitsize int) uint64 {
+	var u uint64
+	if r.err == nil {
+		_, b := r.readNextDiscardArray()
+		if r.err == nil {
+			u, r.err = parseHexUint(b)
+		}
+	}
+	return u
+}
+
 // Float reads a floating point number
 func (r *RReader) Float(bitsize int) float64 {
 	var f float64

@@ -6,7 +6,6 @@ import (
 )
 
 type RWriter struct {
-	w   io.Writer
 	buf []byte
 	err error
 }
@@ -19,7 +18,6 @@ func (w *RWriter) StringArray(sv ...string) {
 	for _, s := range sv {
 		w.buf = respAppendBulkString(w.buf, []byte(s))
 	}
-	w.flushIfNeeded()
 }
 
 func (w *RWriter) ArrayHeader(length int) {
@@ -28,7 +26,6 @@ func (w *RWriter) ArrayHeader(length int) {
 
 func (w *RWriter) Blob(data []byte) {
 	w.buf = respAppendBulkString(w.buf, data)
-	w.flushIfNeeded()
 }
 
 func (w *RWriter) Str(s string) {
@@ -69,14 +66,21 @@ func (w *RWriter) Bool(v bool) {
 
 // -----
 
-func (w *RWriter) flushIfNeeded() {
+// RIOWriter is an extension of RWriter with buffered IO, writing to a io.Writer
+type RIOWriter struct {
+	RWriter
+	w io.Writer
+}
+
+func (w *RIOWriter) Blob(data []byte) {
+	w.RWriter.Blob(data)
 	if len(w.buf) >= 1024 {
 		w.Flush()
 	}
 }
 
-func (w *RWriter) Flush() {
-	// debugTrace("RWriter flush %q", w.buf)
+func (w *RIOWriter) Flush() {
+	// debugTrace("RIOWriter flush %q", w.buf)
 	if w.err == nil {
 		_, w.err = w.w.Write(w.buf)
 	}

@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"math"
 	"strconv"
 )
 
@@ -131,16 +130,51 @@ func respAppendBulkStringHeader(buf []byte, length int) []byte {
 	return append(buf, '\r', '\n')
 }
 
-func appendFloat(b []byte, v float64, bitsize int) []byte {
-	fmt := byte('f')
-	// Note: Must use float32 comparisons for underlying float32 value to get precise cutoffs right.
-	abs := math.Abs(v)
-	if abs != 0 {
-		if bitsize == 64 && (abs < 1e-6 || abs >= 1e21) ||
-			bitsize == 32 && (float32(abs) < 1e-6 ||
-				float32(abs) >= 1e21) {
-			fmt = 'e'
+// valuelen is expected to be base-10 encoded length of value
+func respBulkStringLen(value, valuelen []byte) int {
+	return 1 + len(valuelen) + 2 + len(value) + 2
+}
+
+// expects: len(buf)>=5+len(value)+len(valuelen)
+// valuelen is expected to be base-10 encoded length of value
+func respAddBulkString(buf, value, valuelen []byte) int {
+	i := 0
+
+	buf[i] = '$'
+	i++
+	i += copy(buf[i:], valuelen)
+	buf[i] = '\r'
+	buf[i+1] = '\n'
+	i += 2
+
+	i += copy(buf[i:], value)
+	buf[i] = '\r'
+	buf[i+1] = '\n'
+
+	return i + 2
+}
+
+func splitRESPChunks(data []byte) [][]byte {
+	var chunks [][]byte
+	for i := 0; i < len(data); i++ {
+		start := i
+		b := data[i]
+		i++
+	findend:
+		for ; i < len(data); i++ {
+			switch data[i] {
+			case '\r':
+				chunks = append(chunks, data[start:i])
+			case '\n':
+				break findend
+			}
+		}
+		if b == '$' {
+			i++
+			z, _ := parseUint(chunks[len(chunks)-1][1:])
+			chunks = append(chunks, data[i:i+int(z)])
+			i += int(z) + 1
 		}
 	}
-	return strconv.AppendFloat(b, v, fmt, -1, bitsize)
+	return chunks
 }

@@ -1,6 +1,7 @@
 package redis
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -29,20 +30,98 @@ func debugTrace(format string, args ...interface{}) {
 
 // LoadEntById is part of the ent.Storage interface, used by LoadTYPEById()
 func (s *EntStorage) LoadEntById(e Ent, id uint64) (version uint64, err error) {
-	err = s.r.doRead(&RCmd{
-		func(w *RWriter) error {
+	err = s.r.doRead(s.makeEntLoadCmd(e, id, &version))
+	return
+}
+
+func (s *EntStorage) makeEntLoadCmd(e Ent, id uint64, versionOut *uint64) *RCmd {
+	return &RCmd{
+		func(w *RIOWriter) error {
 			// encode query
-			key := s.entkey(e.EntTypeName(), id)
-			w.StringArray("HGETALL", key)
+			key := makeEntKey(e.EntTypeName(), id)
+			w.ArrayHeader(2)
+			w.Str("HGETALL")
+			w.Blob(key)
 			return nil
 		},
-		func(r *RReader) (err error) {
-			_, version, err = decodeEnt(e, r)
-
-			return
+		func(r *RReader) error {
+			_, version, err := decodeEnt(e, r) // yields ErrNotFound if not found
+			ent.SetEntBaseFieldsAfterLoad(e, s, id, version)
+			if versionOut != nil {
+				*versionOut = version
+			}
+			return err
 		},
-	})
+	}
+}
+
+// FindEntIdsByIndex is part of the ent.Storage interface, used by FindTYPEByINDEX
+func (s *EntStorage) FindEntIdsByIndex(entType string, x *ent.EntIndex, key []byte,
+) (ids []uint64, err error) {
+	indexKey := makeIndexKey(entType, x, key)
+	debugTrace("FindEntIdsByIndex %s.%s %q indexKey=%q", entType, x.Name, key, indexKey)
+
+	if x.IsUnique() {
+		var id uint64
+		cmd := &RCmd{
+			func(w *RIOWriter) error {
+				w.ArrayHeader(2)
+				w.buf = respAppendBulkString(w.buf, []byte("GET"))
+				w.buf = respAppendBulkString(w.buf, indexKey)
+				return nil
+			},
+			func(r *RReader) error {
+				id = r.HexUint(64)
+				return nil
+			},
+		}
+		if err := s.r.doRead(cmd); err != nil {
+			return nil, err
+		}
+		if id == 0 {
+			return nil, ent.ErrNotFound
+		}
+		ids = []uint64{id}
+		return
+	}
+
+	debugTrace("TODO LoadEntsByIndex non-unique")
+	// lookup: ZRANGEBYLEX "type#index" "[alan@bob.com\xff" +
 	return
+}
+
+// LoadEntsByIndex is part of the ent.Storage interface, used by LoadTYPEByINDEX
+func (s *EntStorage) LoadEntsByIndex(e Ent, x *ent.EntIndex, key []byte) ([]Ent, error) {
+	entType := e.EntTypeName()
+	debugTrace("LoadEntsByIndex %s.%s %q", entType, x.Name, key)
+
+	ids, err := s.FindEntIdsByIndex(entType, x, key)
+	if err != nil || len(ids) == 0 {
+		// Note: for x.IsUnique(), FindEntIdsByIndex returns ErrNotFound in case nothing is found
+		return nil, err
+	}
+	debugTrace("FindEntIdsByIndex => %v", ids)
+	ents := make([]Ent, 0, len(ids))
+
+	cmds := make([]radix.CmdAction, len(ids))
+	for i, id := range ids {
+		e2 := e
+		if i > 0 {
+			// must use e for one of the results; ent system depends on this behavior
+			e2 = e.EntNew()
+		}
+		ents = append(ents, e2)
+		cmds[i] = s.makeEntLoadCmd(e2, id, nil)
+	}
+
+	if err = s.r.doRead(radix.Pipeline(cmds...)); err != nil {
+		err2 := errors.Unwrap(err)
+		if err2 == ent.ErrNotFound {
+			err = err2
+		}
+	}
+
+	return ents, err
 }
 
 // SaveEnt is part of the ent.Storage interface, used by TYPE.Save()
@@ -55,7 +134,6 @@ func (s *EntStorage) SaveEnt(e Ent, fieldmap uint64) (nextVersion uint64, err er
 
 // CreateEnt is part of the ent.Storage interface, used by TYPE.Create()
 func (s *EntStorage) CreateEnt(e ent.Ent, fieldmap uint64) (id uint64, err error) {
-	debugTrace("CreateEnt %q fieldmap=%b", e.EntTypeName(), fieldmap)
 	id = e.Id()
 	if id == 0 {
 		// generate new ent id
@@ -69,32 +147,31 @@ func (s *EntStorage) CreateEnt(e ent.Ent, fieldmap uint64) (id uint64, err error
 
 func (s *EntStorage) putEnt(e ent.Ent, id, prevVersion, nextVersion, fieldmap uint64) error {
 	entType := e.EntTypeName()
-	key := s.entkey(entType, id)
-	cmds := make([]radix.Action, 0, 16) // commands to perform in MULTI
-	results := make([]int64, len(cmds)) // results of EXEC
-	debugTrace("putEnt %q key=%q fieldmap=%b", entType, key, fieldmap)
+	entKey := makeEntKey(entType, id)
+
+	debugTrace("putEnt %q key=%q fieldmap=%b (version %d -> %d)",
+		entType, entKey, fieldmap, prevVersion, nextVersion)
 
 	// HSET fields
-	var respData []byte // TODO: use for write-through
-	cmds = append(cmds, &RCmd{
-		func(w *RWriter) (err error) {
-			respData, err = encodeEnt(e, w, key, nextVersion, fieldmap)
-			return
-		},
-		func(r *RReader) error {
-			r.Discard() // "QUEUED"
-			return nil
-		},
-	})
+	// respWriter := RWriter{buf: make([]byte, 0, 128)}
+	respData, err := encodeEntHSET(e, make([]byte, 0, 128), entKey, nextVersion, fieldmap)
+	if err != nil {
+		return err
+	}
+
+	// commands to be run inside a MULTI (pipelined)
+	cmds := make([]radix.CmdAction, 2, 16) // commands to perform in MULTI
+	cmds[0] = &CmdMULTI
+	cmds[1] = &RawCmd{respData}
 
 	// begin redis communication
-	err := s.r.Batch(func(c radix.Conn) (err error) {
+	err = s.r.Batch(func(c radix.Conn) (err error) {
 		ok := false           // set to true just before EXEC is issued
 		multiStarted := false // true after MULTI has been issued
 
 		// WATCH the ent entry key for changes by other clients (e.g. "typename:id")
-		debugTrace(">> WATCH %v", key)
-		if err = c.Do(radix.Cmd(nil, "WATCH", key)); err != nil {
+		debugTrace(">> WATCH %s", entKey)
+		if err = c.Do(makeSingleKeyCmd("WATCH", entKey)); err != nil {
 			return
 		}
 
@@ -115,8 +192,8 @@ func (s *EntStorage) putEnt(e ent.Ent, id, prevVersion, nextVersion, fieldmap ui
 		var currEnt ent.Ent
 		if prevVersion != 0 {
 			currEnt = e.EntNew()
-			currVersion, err := s.loadEntPartial(c, currEnt, key, fieldmap)
-			debugTrace("loadEntPartial %q => version=%v %+v", key, currVersion, currEnt)
+			currVersion, err := s.loadEntPartial(c, currEnt, entKey, fieldmap)
+			debugTrace("loadEntPartial %q => version=%v %+v", entKey, currVersion, currEnt)
 			if err != nil {
 				return err
 			} else if currVersion == 0 {
@@ -141,39 +218,40 @@ func (s *EntStorage) putEnt(e ent.Ent, id, prevVersion, nextVersion, fieldmap ui
 		if err != nil {
 			return err
 		}
-		debugTrace("indexEdits: %+v", indexEdits)
+
+		// debugTrace("indexEdits: %+v", indexEdits)
 		for _, ed := range indexEdits {
-			indexKey := entType + "#" + ed.Index.Name
+			indexKey := makeIndexKey(entType, ed.Index, []byte(ed.Key))
+
+			// WATCH unique index keys
 			if ed.Index.IsUnique() {
-				indexKey += fmt.Sprintf(":%s", ed.Key)
-				debugTrace(">> WATCH %q", indexKey)
-				if err = c.Do(radix.Cmd(nil, "WATCH", indexKey)); err != nil {
+				debugTrace(">> WATCH %s", indexKey)
+				if err = c.Do(makeSingleKeyCmd("WATCH", indexKey)); err != nil {
 					return
 				}
 			}
+
 			if ed.IsCleanup {
 				if ed.Index.IsUnique() {
+					// DEL "foo#email:robin@gmail.com"
 					// Note: DEL returns an integer of the number of entries deleted (0 or 1) but we
 					// don't care about that.
-					debugTrace(">> DEL %q", indexKey)
-					cmds = append(cmds, radix.FlatCmd(nil, "DEL", indexKey))
+					cmds = append(cmds, makeSingleKeyCmd("DEL", indexKey))
 				} else {
-					// remove: ZREM email 0 "cat@bob.com\xffid"
-					entry := fmt.Sprintf("%s\xff%d", ed.Key, id)
-					debugTrace(">> ZREM %q 0 %q", indexKey, entry)
-					cmds = append(cmds, radix.FlatCmd(nil, "ZREM", indexKey, 0, entry))
+					// ZREM foo#email 0 "robin@gmail.com\xff123"
+					cmds = append(cmds, makeZREMIdCmd(indexKey, []byte(ed.Key), id))
 				}
 				continue
 			}
-			// not cleanup
+			// case !ed.IsCleanup
 			if ed.Index.IsUnique() {
 				var existingId uint64
-				err := c.Do(radix.FlatCmd(&existingId, "GET", indexKey))
+				err := c.Do(radix.FlatCmd(&existingId, "GET", string(indexKey)))
 				if err != nil {
 					return err
 				}
 				if existingId == 0 {
-					cmds = append(cmds, radix.FlatCmd(nil, "SETNX", indexKey, id))
+					cmds = append(cmds, makeSETNXIdCmd(indexKey, id))
 				} else if existingId != id {
 					return fmt.Errorf("unique index conflict %s.%s", entType, ed.Index.Name)
 				}
@@ -181,31 +259,24 @@ func (s *EntStorage) putEnt(e ent.Ent, id, prevVersion, nextVersion, fieldmap ui
 				// entry:  ZADD email 0 "alan@bob.com\xffid"
 				// lookup: ZRANGEBYLEX email "[alan@bob.com\xff" +
 				// remove: ZREM email 0 "cat@bob.com\xffid"
-				entry := fmt.Sprintf("%s\xff%d", ed.Key, id)
-				cmds = append(cmds, radix.FlatCmd(nil, "ZADD", indexKey, 0, entry))
+				cmds = append(cmds, makeZADDIdCmd(indexKey, []byte(ed.Key), id))
 			}
 		} // end of update index
 
-		// MULTI
-		debugTrace(">> MULTI")
-		if err = c.Do(&CmdMULTI); err != nil {
-			return
-		}
-		multiStarted = true
-
-		// cmds
+		// Perform cmds pipelined, meaning all commands are sent in one go, then all responses are
+		// read in one go, instead of write,read,write,read...
+		// First cmd is MULTI.
 		for _, a := range cmds {
 			debugTrace(">> %v", a)
-			if err = c.Do(a); err != nil {
-				break
-			}
 		}
+		multiStarted = true
+		err = c.Do(radix.Pipeline(cmds...))
 
 		// EXEC
 		if err == nil {
 			debugTrace(">> EXEC")
 			ok = true
-			err = c.Do(radix.Cmd(&results, "EXEC"))
+			err = c.Do(&CmdEXEC)
 		}
 		return
 	}) // s.r.Batch
@@ -219,31 +290,21 @@ func (s *EntStorage) putEnt(e ent.Ent, id, prevVersion, nextVersion, fieldmap ui
 		return err
 	}
 
-	debugTrace("EXEC results: %#v", results)
 	return nil
 }
 
 // DeleteEnt is part of the ent.Storage interface, used by TYPE.PermanentlyDelete()
 func (s *EntStorage) DeleteEnt(e ent.Ent) error {
-	cmd := radix.Cmd(nil, "DEL", s.entkey(e.EntTypeName(), e.Id()))
+	entKey := makeEntKey(e.EntTypeName(), e.Id())
+	debugTrace("DEL %s", entKey)
+	cmd := makeSingleKeyCmd("DEL", entKey)
 	return s.r.doWriteIdempotent(cmd)
-}
-
-// FindEntIdsByIndex is part of the ent.Storage interface, used by FindTYPEByINDEX
-func (s *EntStorage) FindEntIdsByIndex(
-	entTypeName, indexName string, key []byte) (ids []uint64, err error) {
-	return nil, nil
-}
-
-// LoadEntsByIndex is part of the ent.Storage interface, used by LoadTYPEByINDEX
-func (s *EntStorage) LoadEntsByIndex(e Ent, indexName string, key []byte) ([]Ent, error) {
-	return nil, nil
 }
 
 // loadEntPartial
 // Note: If an ent is not found, this returns version=0 (it does NOT return ent.ErrNotFound)
 func (s *EntStorage) loadEntPartial(
-	c radix.Conn, e Ent, key string, fieldmap uint64) (version uint64, err error) {
+	c radix.Conn, e Ent, entKey []byte, fieldmap uint64) (version uint64, err error) {
 	// list of keys to fetch
 	keys := make([]string, 1, bits.PopcountUint64(fieldmap)+1)
 	keys[0] = ent.FieldNameVersion
@@ -254,11 +315,11 @@ func (s *EntStorage) loadEntPartial(
 	}
 	// communicate with redis
 	err = c.Do(&RCmd{
-		func(w *RWriter) error {
+		func(w *RIOWriter) error {
 			// encode query
 			w.ArrayHeader(len(keys) + 2)
 			w.buf = respAppendBulkString(w.buf, []byte("HMGET"))
-			w.buf = respAppendBulkString(w.buf, []byte(key))
+			w.buf = respAppendBulkString(w.buf, entKey)
 			for _, k := range keys {
 				w.buf = respAppendBulkString(w.buf, []byte(k))
 			}
@@ -283,28 +344,54 @@ func (s *EntStorage) loadEntPartial(
 	return
 }
 
-// entkey returns the canonical redis storage key for an ent
-func (s *EntStorage) entkey(entTypeName string, id uint64) string {
-	if id == 0 {
-		panic("zero id")
-	}
+// makeEntKey returns the canonical redis storage key for an ent
+func makeEntKey(entTypeName string, id uint64) []byte {
 	// Zero padded ID so that ents are ordered by creation time.
 	// We could do something fancy here like base-62 encoding but this way, using hexadecimal
 	// encoding, we make it easier for a human to construct the key. The length of base-62 is
 	// just very slightly shorter for uint64 than hexadecimal (16 vs 11 bytes) so the win in
 	// data would really have no meaningful effect.
-	return fmt.Sprintf("%s:%016x", entTypeName, id)
+	if id == 0 {
+		panic("zero id")
+	}
+	var scratch [16]byte
+	idstr := fmtint(scratch[:], id, 16)
+	b := make([]byte, len(entTypeName)+1+len(idstr))
+	i := copy(b, entTypeName)
+	b[i] = ':'
+	i++
+	copy(b[i:], idstr)
+	return b
+	// return fmt.Sprintf("%s:%016x", entTypeName, id)
 }
 
-// encodeEnt writes a HSET command on w with all fields in fieldmap for e.
+func makeIndexKey(entTypeName string, x *ent.EntIndex, entryKey []byte) []byte {
+	z := len(entTypeName) + 1 + len(x.Name)
+	if x.IsUnique() {
+		z += 1 + len(entryKey)
+	}
+	b := make([]byte, z)
+	i := copy(b, entTypeName)
+	b[i] = '#'
+	i++
+	i += copy(b[i:], x.Name)
+	if x.IsUnique() {
+		b[i] = ':'
+		i++
+		copy(b[i:], entryKey)
+	}
+	return b
+}
+
+// encodeEntHSET writes a HSET command on w with all fields in fieldmap for e.
 // If version is not zero, then the ent.FieldNameVersion field is written as well.
-func encodeEnt(e Ent, w *RWriter, key string, version, fieldmap uint64) ([]byte, error) {
+func encodeEntHSET(e Ent, buf, entKey []byte, version, fieldmap uint64) ([]byte, error) {
 	nfields := bits.PopcountUint64(fieldmap)
 	if version != 0 {
 		nfields++
 	}
-	c := EntEncoder{buf: w.buf}
-	c.BeginHSET(key, nfields)
+	c := EntEncoder{buf: buf[:0]}
+	c.BeginHSET(entKey, nfields)
 	if version != 0 {
 		c.Str(ent.FieldNameVersion)
 		c.Uint(version, 64)
@@ -312,8 +399,8 @@ func encodeEnt(e Ent, w *RWriter, key string, version, fieldmap uint64) ([]byte,
 	e.EntEncode(&c, fieldmap)
 	respData := c.Buffer()
 	if c.err == nil {
-		debugTrace("encodeEnt HSET %q", c.buf)
-		_, c.err = w.w.Write(respData)
+		debugTrace("encodeEntHSET %q", respData)
+		// _, c.err = w.w.Write(respData)
 	}
 	return respData, c.err
 }
@@ -362,12 +449,12 @@ type EntEncoder struct {
 
 var hsetCmdSlice = []byte("HSET")
 
-func (c *EntEncoder) BeginHSET(key string, nfields int) {
+func (c *EntEncoder) BeginHSET(key []byte, nfields int) {
 	bufgrow(&c.buf, ((1+intBase10MaxLen+2)*3)+len(hsetCmdSlice)+len(key))
 	// note: keys and values in HSET must not be simple strings
 	buf := respAppendArrayHeader(c.buf, 2+nfields*2)
 	buf = respAppendBulkString(buf, hsetCmdSlice)
-	c.buf = respAppendBulkString(buf, []byte(key))
+	c.buf = respAppendBulkString(buf, key)
 }
 
 func (c *EntEncoder) Buffer() []byte { return c.buf }

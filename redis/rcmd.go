@@ -9,7 +9,7 @@ import (
 )
 
 type RCmd struct { // conforms to radix.Marshaler
-	Encode func(w *RWriter) error
+	Encode func(w *RIOWriter) error
 	Decode func(r *RReader) error
 }
 
@@ -27,7 +27,7 @@ func (a *RCmd) Run(c radix.Conn) error {
 }
 
 func (a *RCmd) MarshalRESP(w io.Writer) error {
-	writer := RWriter{w: w, buf: make([]byte, 0, 128)}
+	writer := RIOWriter{RWriter{buf: make([]byte, 0, 128)}, w}
 	if err := a.Encode(&writer); err != nil {
 		return err
 	}
