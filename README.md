@@ -102,6 +102,8 @@ Notice a couple of things:
 
 - The `displayName` field is called `alias`; renamed by the `ent` field tag.
 
+- Field order matches our struct definition.
+
 Now let's store this account in a database. This is really what _ent_ is about — data persistence.
 We start this example by creating a place to store ents, a storage. Here we use an in-memory
 storage implementation `mem.EntStorage` but there are other kinds, like [Redis](redis/).
