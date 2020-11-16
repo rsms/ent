@@ -146,7 +146,7 @@ Since we specified `unique` on the `email` field, we can look up ents by email i
   fmt.Printf(`account with email "jane@example.com": %v\n`, b)
   // { _ver: "1", _id: "1", name: "Jane", ...
 
-  _, err := FindAccountByEmail(estore, "does@not.exist")
+  _, err := LoadAccountByEmail(estore, "does@not.exist")
   fmt.Printf("error from lookup of non-existing email: %v\n", err)
 ```
 
