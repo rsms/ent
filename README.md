@@ -65,6 +65,9 @@ When this file changes we should run `entgen` (or `go generate` if we have a `//
 comment in the file.) Doing so causes a few methods, functions and data to be generated for the
 Account type, which makes it a fully-functional data entity.
 
+You can either run [`entgen`](#entgen) from source or go modules, or install it with
+`go get github.com/rsms/ent/entgen`. See [#entgen](#entgen) for more details.
+
 We can now create, load, query, update and delete accounts.
 But let's start by making one and just printing it:
 
@@ -270,3 +273,38 @@ atomically:
 ```
 
 This versioning approach was inspired by [CouchDB](https://couchdb.apache.org).
+
+## entgen
+
+entgen is a program that parses go packages and generates ent code for all ent-enabled
+struct types.
+
+You can either run [`entgen`](#entgen) from source or go modules, or install it with
+`go get github.com/rsms/ent/entgen`.
+To install a specific version run `go get github.com/rsms/ent/entgen@vX.X.X`
+replacing the "X"es with the version you want.
+
+### Synopsis
+
+```
+Usage: entgen [options] [<srcdir> ...]
+options:
+  -debug
+      Debug logging (implies -v)
+  -entpkg string
+      Import path of ent package (default "github.com/rsms/ent")
+  -filter string
+      Only process go struct types which name matches the provided
+      regular expression
+  -h, -help
+      Show help and exit
+  -nofmt
+      Disable "gofmt" formatting of generated code
+  -o string
+      Filename of generated go code, relative to <srcdir>.
+      Use "-" for stdout. (default "ents.gen.go")
+  -v
+      Verbose logging
+  -version
+      Print "entgen 0.1.0" and exit
+```
