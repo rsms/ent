@@ -42,6 +42,7 @@ type Fields struct {
 var (
 	ErrNoStorage       = errors.New("no ent storage")
 	ErrNotFound        = errors.New("ent not found")
+	ErrNotChanged      = errors.New("ent not changed")
 	ErrVersionConflict = errors.New("version conflict")
 	ErrDuplicateEnt    = errors.New("duplicate ent")
 )
@@ -187,7 +188,7 @@ func SaveEnt(e Ent) error {
 		return ErrNoStorage
 	}
 	if eb.fieldmap == 0 {
-		return nil
+		return ErrNotChanged
 	}
 	version, err := eb.storage.SaveEnt(e, eb.fieldmap)
 	if err == nil {
