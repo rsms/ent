@@ -242,10 +242,10 @@ Example of a version conflict:
   a1, _ := LoadAccountById(estore, 1)
   a2, _ := LoadAccountById(estore, 1)
   // make a change to copy a1 and save it
-  a1.SetName(a1.name)
+  a1.SetName("Jenn")
   a1.Save()
   // make a change to copy a2 and save it
-  a2.SetName(a2.name)
+  a2.SetName("Jeannie")
   fmt.Printf("version conflict error: %v\n", a2.Save())
 ```
 
