@@ -67,7 +67,7 @@ func parseopts() []string {
 
 	// maybe just print version and exit
 	if opt_version {
-		println(versionstring)
+		os.Stdout.Write([]byte(versionstring + "\n"))
 		os.Exit(0)
 	}
 
