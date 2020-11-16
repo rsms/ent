@@ -149,7 +149,7 @@ func (r *Redis) doWrite(a radix.Action) error {
 // Only idempotent actions like "SET" can use this.
 func (r *Redis) doWriteIdempotent(a radix.Action) error {
 	err := r.rwc.Do(a)
-	if err == nil && r.rwc != r.roc {
+	if err == nil && r.roc != nil {
 		// write-through cache
 		if err := r.roc.Do(a); err != nil && r.Logger != nil {
 			// failure only in local cache; log but don't return the error
