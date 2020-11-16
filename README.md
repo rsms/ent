@@ -150,7 +150,7 @@ Since we specified `unique` on the `email` field, we can look up ents by email i
   fmt.Printf("error from lookup of non-existing email: %v\n", err)
 ```
 
-If we just need to check if an ent exists, or we just need to know the id, we can use the
+If we just need to check if an ent exists, or we only need to know the id, we can use the
 `Find...` functions instead of the `Load...` functions:
 
 ```go
@@ -206,8 +206,7 @@ The same would happen if we tried to update an account to use an already-used em
   // unique index conflict account.email with ent #1
 ```
 
-However if we change the email of Jane's account, we then use the email address Jane used to use
-for other accounts:
+However if we change the email of Jane's account, we can reuse Jane's old email address:
 
 ```go
   a, _ = LoadAccountById(estore, 1)
