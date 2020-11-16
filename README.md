@@ -218,17 +218,25 @@ However if we change the email of Jane's account, we can reuse Jane's old email 
   fmt.Printf("no error: %v\n", a.Save())
 ```
 
-The ent system maintains these indexes automatically and updating them in a transactional manner:
-a `Create` or `Save` call either fully succeeds, including index changes, or doesn't have an
-effect at all on any sort of failure. This a promise declared by the ent system but actually
-fulfilled by the particular storage used. Both of the storage implementations that comes with
-ent are fully transactional (mem and redis.)
+The ent system maintains these indexes automatically and updates them in a transactional manner:
+a `Create` or `Save` call either fully succeeds, including index changes, or has no effect at all.
+This promise is declared by the ent system but actually fulfilled by the particular storage used.
+Both of the storage implementations that comes with ent are fully transactional (mem and redis.)
 
 Changes to ents are tracked with versioning. Every update to an ent increments its version.
-The version is used when updating an ent; we say "make X changes to ent Y of version Z".
-If the ent's version is Z in the storage, then the changes are applied and its version is
-incremented to Z+1, however if someone else made a change to the ent the version in storage won't
-match and we get a `ErrVersionConflict` error instead of changes being made:
+The version is used when updating an ent:
+
+When we say "make X changes to ent Y of version Z" the storage...
+
+- Checks the current version against the expected version.
+  If the ent's version is Z in the storage...
+
+- ...then the changes are applied and its version is incremented to Z+1.
+
+- However if someone else made a change to the ent the version in storage won't
+  match and we get a `ErrVersionConflict` error instead of changes being made.
+
+Example of a version conflict:
 
 ```go
   a1, _ := LoadAccountById(estore, 1)
