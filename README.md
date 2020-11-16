@@ -150,8 +150,8 @@ Since we specified `unique` on the `email` field, we can look up ents by email i
   fmt.Printf("error from lookup of non-existing email: %v\n", err)
 ```
 
-If we just need to check if an ent exists or we use a cache of some sort, we can use the `Find...`
-functions instead of the `Load...` functions:
+If we just need to check if an ent exists, or we just need to know the id, we can use the
+`Find...` functions instead of the `Load...` functions:
 
 ```go
   id, _ := FindAccountByEmail(estore, "jane@example.com")
