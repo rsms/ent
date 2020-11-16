@@ -42,6 +42,7 @@ var (
 	ErrNotFound        = errors.New("ent not found")
 	ErrNotChanged      = errors.New("ent not changed")
 	ErrVersionConflict = errors.New("version conflict")
+	ErrUniqueConflict  = errors.New("unique index conflict")
 	ErrDuplicateEnt    = errors.New("duplicate ent")
 )
 

@@ -370,9 +370,11 @@ func (s *EntStorage) computeIndexEdits(
 				if existingId == 0 {
 					cmds = append(cmds, makeSETNXIdCmd(indexKey, id))
 				} else if existingId != id {
-					// TODO: a semantic error; something the caller can easily identify as "index conflict"
-					return fmt.Errorf("unique index conflict %s.%s with ent #%d",
-						entType, ed.Index.Name, existingId)
+					return &ent.IndexConflictErr{
+						Underlying:  ent.ErrUniqueConflict,
+						EntTypeName: entType,
+						IndexName:   ed.Index.Name,
+					}
 				}
 			} else {
 				cmds = append(cmds, makeZADDIdCmd(indexKey, []byte(ed.Key), id))

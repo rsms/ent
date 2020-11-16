@@ -1,7 +1,6 @@
 package mem
 
 import (
-	"fmt"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -140,9 +139,11 @@ func (s *EntStorage) putEnt(e Ent, id, version, changedFields uint64) error {
 					if ids[0] == id {
 						continue
 					}
-					// TODO: a semantic error; something the caller can easily identify as "index conflict"
-					return fmt.Errorf("unique index conflict %s.%s with ent #%d",
-						entTypeName, ed.Index.Name, ids[0])
+					return &ent.IndexConflictErr{
+						Underlying:  ent.ErrUniqueConflict,
+						EntTypeName: entTypeName,
+						IndexName:   ed.Index.Name,
+					}
 				}
 			}
 			m.Put(key, ent.IdSet(ed.Value).Encode())

@@ -100,3 +100,16 @@ func NewVersionConflictErr(expectedVersion, actualVersion uint64) *VersionConfli
 		ActualVersion:   actualVersion,
 	}
 }
+
+// IndexConflictErr is returned when a Create or Save call fails because there is an index
+// conflict.
+type IndexConflictErr struct {
+	Underlying  error  // i.e. ErrUniqueConflict
+	EntTypeName string // typename of subject ent (== TYPE.EntTypeName())
+	IndexName   string // name of subject index
+}
+
+func (e *IndexConflictErr) Unwrap() error { return e.Underlying }
+func (e *IndexConflictErr) Error() string {
+	return fmt.Sprintf("index conflict on %s.%s", e.EntTypeName, e.IndexName)
+}
