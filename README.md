@@ -228,13 +228,13 @@ The version is used when updating an ent:
 
 When we say "make X changes to ent Y of version Z" the storage...
 
-- Checks the current version against the expected version.
-  If the ent's version is Z in the storage...
+- Checks the current version against the expected version Z.
 
-- ...then the changes are applied and its version is incremented to Z+1.
+- If the ent's version is Z in the storage then the changes are applied and its
+  version is incremented to Z+1.
 
-- However if someone else made a change to the ent the version in storage won't
-  match and we get a `ErrVersionConflict` error instead of changes being made.
+- However if someone else made a change to the ent after we loaded it, the version in storage
+  won't match Z and we get a `ErrVersionConflict` error.
 
 Example of a version conflict:
 
