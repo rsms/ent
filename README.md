@@ -33,7 +33,8 @@ Features:
 ## Tutorial
 
 Ent uses Go structs. By adding `ent.EntBase` as the first embedded field in a struct, you have
-made it into an ent!
+made it into an ent! You can find a complete example of this code in
+[`examples/tutorial`](examples/tutorial/).
 
 Let's start by defining an "Account" struct type:
 
