@@ -251,8 +251,8 @@ Example of a version conflict:
 
 To resolve a conflict we either need to discard our change to `a2` or load the current version and
 reapply our changes. If simply replacing values is not what we want, we could load a second copy
-and merged our new values with the current ones.
-In this example we simply retry or edit on the most recent version:
+and merge our new values with the current ones.
+In this example we simply retry our edit on the most recent version:
 
 ```go
   a2.Reload() // load msot current values from storage
