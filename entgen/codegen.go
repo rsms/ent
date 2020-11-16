@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"go/token"
 	"go/types"
-	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -108,7 +106,7 @@ func (g *Codegen) Finalize() []byte {
 	wf := func(format string, args ...interface{}) {
 		fmt.Fprintf(header, format, args...)
 	}
-	wf("%s by %s. Edit with caution!\n", generatedByHeaderPrefix, filepath.Base(os.Args[0]))
+	wf("%s\n", generatedByHeaderPrefix)
 	wf("package %s\n", g.pkg.Name)
 
 	if len(g.imports) == 0 {
