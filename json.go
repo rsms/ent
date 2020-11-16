@@ -4,7 +4,8 @@ import "github.com/rsms/go-json"
 
 // JsonEncoder is an implementation of the Encoder interface
 type JsonEncoder struct {
-	json.Builder // Note: set Builder.Indent to enable pretty-printing
+	json.Builder      // Note: set Builder.Indent to enable pretty-printing
+	BareKeys     bool // when true, don't wrap keys in "..."
 }
 
 func (c *JsonEncoder) Err() error { return c.Builder.Err }
@@ -23,6 +24,14 @@ func (c *JsonEncoder) BeginList(length int) { c.StartArray() }
 func (c *JsonEncoder) EndList()             { c.EndArray() }
 func (c *JsonEncoder) BeginDict(length int) { c.StartObject() }
 func (c *JsonEncoder) EndDict()             { c.EndObject() }
+
+func (e *JsonEncoder) Key(k string) {
+	if e.BareKeys {
+		e.RawKey([]byte(k))
+	} else {
+		e.KeyBytes([]byte(k))
+	}
+}
 
 // JsonDecoder is an implementation of the Decoder interface
 type JsonDecoder struct {
@@ -67,9 +76,9 @@ func JsonDecodeEntPartial(e Ent, data []byte, fields uint64) (version uint64, er
 // The two following functions are used by ent.JsonEncode and ent.JsonDecode to expose a general
 // JSON codec as well as to implement MarshalJSON and UnmarshalJSON for Ent types.
 
-func JsonEncodeEnt(e Ent, id, version, fieldmap uint64) ([]byte, error) {
+func JsonEncodeEnt(e Ent, id, version, fieldmap uint64, indent string) ([]byte, error) {
 	c := JsonEncoder{}
-	// c.Builder.Indent = "  " // pretty print
+	c.Builder.Indent = indent
 	c.BeginEnt(version)
 
 	// include the id so that jsonDecodeEnt works as expected

@@ -101,15 +101,15 @@ func IsFieldChanged(e *EntBase, fieldIndex int) bool {
 }
 
 // JsonEncode encodes the ent as JSON
-func JsonEncode(e Ent) ([]byte, error) {
+func JsonEncode(e Ent, indent string) ([]byte, error) {
 	// Note: Used by generated code to implement MarshalJSON
-	return JsonEncodeEnt(e, e.Id(), e.Version(), e.EntFields().Fieldmap)
+	return JsonEncodeEnt(e, e.Id(), e.Version(), e.EntFields().Fieldmap, indent)
 }
 
 // JsonEncodeUnsaved encodes the ent as JSON, only including fields with unsaved changes
-func JsonEncodeUnsaved(e Ent) ([]byte, error) {
+func JsonEncodeUnsaved(e Ent, indent string) ([]byte, error) {
 	eb := entBase(e)
-	return JsonEncodeEnt(e, e.Id(), e.Version(), eb.fieldmap)
+	return JsonEncodeEnt(e, e.Id(), e.Version(), eb.fieldmap, indent)
 }
 
 // JsonEncode encodes the ent as JSON
@@ -122,6 +122,11 @@ func JsonDecode(e Ent, data []byte) error {
 		eb.version = version
 	}
 	return err
+}
+
+func EntString(e Ent) string {
+	b, _ := Repr(e, e.EntFields().Fieldmap, ReprOmitEmpty)
+	return string(b)
 }
 
 // SetEntBaseFieldsAfterLoad sets values of EntBase fields.
