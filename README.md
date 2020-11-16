@@ -1,4 +1,4 @@
-# ent -- Simple data entities for Go
+# Simple data entities for Go
 
 [![GitHub tag (latest SemVer)](https://img.shields.io/github/tag/rsms/ent.svg)][godoc]
 [![PkgGoDev](https://pkg.go.dev/badge/github.com/rsms/ent)][godoc]
@@ -6,7 +6,7 @@
 
 [godoc]: https://pkg.go.dev/github.com/rsms/ent
 
-Ent, short for "entities", is data persistence for Go on plain Go structs.
+Ent, short for "entities", is data persistence for Go, using plain Go structs.
 
 Features:
 
@@ -43,7 +43,7 @@ package main
 
 import "github.com/rsms/ent"
 
-type AccountKind int
+type AccountKind int32
 
 const (
   AccountRestricted = AccountKind(iota)
@@ -52,7 +52,7 @@ const (
 )
 
 type Account struct {
-  ent.EntBase `account` // type name, used to storage these kinds of ents
+  ent.EntBase `account` // type name, used to store these kinds of ents
   name        string
   displayName string      `ent:"alias"`   // use a different field name for storage
   email       string      `ent:",unique"` // maintain a unique index for this field
@@ -71,6 +71,7 @@ But let's start by making one and just printing it:
 func main() {
   a := &Account{
     name:  "Jane",
+    alias: "j-town",
     email: "jane@example.com",
     kind:  AccountMember,
   }
@@ -85,8 +86,9 @@ If we build & run this we should see the following output:
   _ver:  "0",
   _id:   "0",
   name:  "Jane",
+  alias: "j-town",
   email: "jane@example.com",
-  kind:  "1"
+  kind:  1
 }
 ```
 
@@ -115,8 +117,8 @@ import "github.com/rsms/ent/mem"
   println(a.String())
 ```
 
-Our account is now persisted.
-The output from the last print statement now contains non-zero id and version:
+Our account is now saved.
+The output from the last print statement now contains non-zero version & id:
 
 ```
 {
@@ -220,3 +222,41 @@ a `Create` or `Save` call either fully succeeds, including index changes, or doe
 effect at all on any sort of failure. This a promise declared by the ent system but actually
 fulfilled by the particular storage used. Both of the storage implementations that comes with
 ent are fully transactional (mem and redis.)
+
+Changes to ents are tracked with versioning. Every update to an ent increments its version.
+The version is used when updating an ent; we say "make X changes to ent Y of version Z".
+If the ent's version is Z in the storage, then the changes are applied and its version is
+incremented to Z+1, however if someone else made a change to the ent the version in storage won't
+match and we get a `ErrVersionConflict` error instead of changes being made:
+
+```go
+  a1, _ := LoadAccountById(estore, 1)
+  a2, _ := LoadAccountById(estore, 1)
+  // make a change to copy a1 and save it
+  a1.SetName(a1.name)
+  a1.Save()
+  // make a change to copy a2 and save it
+  a2.SetName(a2.name)
+  fmt.Printf("version conflict error: %v\n", a2.Save())
+```
+
+To resolve a conflict we either need to discard our change to `a2` or load the current version and
+reapply our changes. If simply replacing values is not what we want, we could load a second copy
+and merged our new values with the current ones.
+In this example we simply retry or edit on the most recent version:
+
+```go
+  a2.Reload() // load msot current values from storage
+  a2.SetName("Jeannie")
+  fmt.Printf("save now works (no error): %v\n", a2.Save())
+```
+
+In some ways this approach resembles "compare and swap" memory operations:
+
+```
+atomically:
+  if currentValue is expectedValue:
+    setValue(newValue)
+```
+
+This versioning approach was inspired by [CouchDB](https://couchdb.apache.org).

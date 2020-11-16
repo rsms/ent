@@ -7,7 +7,7 @@ import (
 	"github.com/rsms/ent/mem"
 )
 
-type AccountKind int
+type AccountKind int32
 
 const (
 	AccountRestricted = AccountKind(iota)
@@ -25,9 +25,10 @@ type Account struct {
 
 func main() {
 	a := &Account{
-		name:  "Jane",
-		email: "jane@example.com",
-		kind:  AccountMember,
+		name:        "Jane",
+		displayName: "j-town",
+		email:       "jane@example.com",
+		kind:        AccountMember,
 	}
 	println(a.String())
 
@@ -73,4 +74,17 @@ func main() {
 	a, _ = LoadAccountByEmail(estore, "robin@foo.com")
 	a.SetEmail("jane@example.com")
 	fmt.Printf("no error: %v\n", a.Save())
+
+	a1, _ := LoadAccountById(estore, 1)
+	a2, _ := LoadAccountById(estore, 1)
+	// make a change to copy a1 and save it
+	a1.SetName("Jenn")
+	a1.Save()
+	// make a change to copy a2 and save it
+	a2.SetName("Jeannie")
+	fmt.Printf("version conflict error: %v\n", a2.Save())
+
+	a2.Reload() // load msot current values from storage
+	a2.SetName("Jeannie")
+	fmt.Printf("save now works (no error): %v\n", a2.Save())
 }

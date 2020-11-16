@@ -30,7 +30,7 @@ func FindAccountByEmail(s ent.Storage, email string) (uint64, error) {
 func LoadAccountByKind(s ent.Storage, kind AccountKind, limit int) ([]*Account, error) {
 	e := &Account{}
 	r, err := ent.LoadEntsByIndex(s, e, &ent_Account_idx[1], 1, limit, func(c ent.Encoder) {
-		c.Int(int64(kind), 64)
+		c.Int(int64(kind), 32)
 	})
 	return ent_Account_slice_cast(r), err
 }
@@ -38,7 +38,7 @@ func LoadAccountByKind(s ent.Storage, kind AccountKind, limit int) ([]*Account, 
 // FindAccountByKind looks up Account ids with kind
 func FindAccountByKind(s ent.Storage, kind AccountKind, limit int) ([]uint64, error) {
 	return ent.FindEntIdsByIndex(s, "account", &ent_Account_idx[1], 1, limit, func(c ent.Encoder) {
-		c.Int(int64(kind), 64)
+		c.Int(int64(kind), 32)
 	})
 }
 
@@ -98,7 +98,7 @@ func (e *Account) EntEncode(c ent.Encoder, fields uint64) {
 	}
 	if (fields & (1 << 3)) != 0 {
 		c.Key("kind")
-		c.Int(int64(e.kind), 64)
+		c.Int(int64(e.kind), 32)
 	}
 }
 
@@ -119,7 +119,7 @@ func (e *Account) EntDecode(c ent.Decoder) (id, version uint64) {
 		case "email":
 			e.email = c.Str()
 		case "kind":
-			e.kind = AccountKind(c.Int(64))
+			e.kind = AccountKind(c.Int(32))
 		default:
 			c.Discard()
 		}
@@ -145,7 +145,7 @@ func (e *Account) EntDecodePartial(c ent.Decoder, fields uint64) (version uint64
 		case "kind":
 			n--
 			if (fields & (1 << 3)) != 0 {
-				e.kind = AccountKind(c.Int(64))
+				e.kind = AccountKind(c.Int(32))
 				continue
 			}
 		}
