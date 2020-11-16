@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/mediocregopher/radix/v3"
 	"github.com/rsms/ent"
@@ -21,32 +20,22 @@ func debugTrace(format string, args ...interface{}) {
 type Ent = ent.Ent
 
 type EntStorage struct {
-	r              *Redis
-	backgroundJobs sync.WaitGroup
+	*Redis
 }
 
 func NewEntStorage(r *Redis) *EntStorage {
 	return &EntStorage{
-		r: r,
+		Redis: r,
 	}
 }
 
 func (s *EntStorage) Close() error {
-	s.backgroundJobs.Wait()
 	return nil
-}
-
-func (s *EntStorage) goBackground(f func()) {
-	s.backgroundJobs.Add(1)
-	go func() {
-		defer s.backgroundJobs.Done()
-		f()
-	}()
 }
 
 // LoadEntById is part of the ent.Storage interface, used by LoadTYPEById()
 func (s *EntStorage) LoadEntById(e Ent, id uint64) (version uint64, err error) {
-	err = s.r.doRead(s.makeEntLoadCmd(e, id, &version))
+	err = s.doRead(s.makeEntLoadCmd(e, id, &version))
 	return
 }
 
@@ -81,7 +70,7 @@ func (s *EntStorage) FindEntIdsByIndex(
 	if x.IsUnique() {
 		var id uint64
 		cmd := makeGETEntIdCmd(indexKey, &id)
-		if err := s.r.doRead(cmd); err != nil {
+		if err := s.doRead(cmd); err != nil {
 			return nil, err
 		}
 		if id == 0 {
@@ -93,7 +82,7 @@ func (s *EntStorage) FindEntIdsByIndex(
 
 	// ZRANGEBYLEX "type#index" "[value\xfe" "(value\xff"
 	cmd := makeZRangeEntIdsCmd(indexKey, key, limit)
-	err = s.r.doRead(cmd)
+	err = s.doRead(cmd)
 	ids = cmd.Result
 	return
 }
@@ -124,7 +113,7 @@ func (s *EntStorage) LoadEntsByIndex(
 		cmds[i] = s.makeEntLoadCmd(e2, id, nil)
 	}
 
-	if err = s.r.doRead(radix.Pipeline(cmds...)); err != nil {
+	if err = s.doRead(radix.Pipeline(cmds...)); err != nil {
 		err2 := errors.Unwrap(err)
 		if err2 == ent.ErrNotFound {
 			err = err2
@@ -148,7 +137,7 @@ func (s *EntStorage) CreateEnt(e ent.Ent, fieldmap uint64) (id uint64, err error
 	if id == 0 {
 		// generate new ent id
 		// note: HINCRBY never yields 0, so we can use 0 to signify "no id"
-		if err = s.r.doWrite(radix.FlatCmd(&id, "HINCRBY", "entid", e.EntTypeName(), 1)); err != nil {
+		if err = s.doWrite(radix.FlatCmd(&id, "HINCRBY", "entid", e.EntTypeName(), 1)); err != nil {
 			return
 		}
 	}
@@ -174,17 +163,12 @@ func (s *EntStorage) putEnt(e ent.Ent, id, prevVersion, nextVersion, fieldmap ui
 	cmds[0] = &CmdMULTI
 	cmds[1] = &RawCmd{respData}
 
-	// // addCmd appends cmd to cmds
-	// addCmd := func(cmd *RawCmd) {
-	// 	cmds = append(cmds, cmd)
-	// }
-
 	// watchKeys contains all keys watched
 	watchKeys := make([][]byte, 1, 16)
 	watchKeys[0] = entKey
 
 	// begin redis communication
-	err = s.r.Batch(func(c radix.Conn) (err error) {
+	err = s.Batch(func(c radix.Conn) (err error) {
 		ok := false
 
 		// WATCH the ent entry key for changes by other clients (e.g. "typename:id")
@@ -228,6 +212,9 @@ func (s *EntStorage) putEnt(e ent.Ent, id, prevVersion, nextVersion, fieldmap ui
 				debugTrace(">> WATCH %s; %+v", key, cmd)
 				return c.Do(radix.Pipeline(makeSingleKeyCmd("WATCH", key), cmd))
 			})
+		if err != nil {
+			return
+		}
 
 		// prepend watch to cmds, skipping the first that we issued separately
 		if len(watchKeys) > 1 {
@@ -251,7 +238,7 @@ func (s *EntStorage) putEnt(e ent.Ent, id, prevVersion, nextVersion, fieldmap ui
 		err = c.Do(radix.Pipeline(cmds...))
 		ok = err == nil
 		return
-	}) // s.r.Batch
+	}) // s.Batch
 
 	if err != nil {
 		// Note: In case an index changes from unique to non-unique, or vice versa, we get this error:
@@ -265,18 +252,16 @@ func (s *EntStorage) putEnt(e ent.Ent, id, prevVersion, nextVersion, fieldmap ui
 	// If we use a separate reader redis server, write-through by applying the cmds locally.
 	// This ensures immediate consistency, for example if the caller tries to load the ent
 	// immediately after creating it.
-	if s.r.RClient() != s.r.WClient() {
-		s.goBackground(func() {
-			// debugTrace("RClient >> %s",
-			// 	strings.ReplaceAll(fmt.Sprintf("%+v", cmds), "RawCmd[", "\n  RawCmd["))
-			err := s.r.RClient().Do(radix.Pipeline(cmds...))
-			// debugTrace("RClient result => %v", err)
-			// Fail with a warning; in case this fails the data is eventually consistent.
-			// It is also possible that the replication won the race.
-			if err != nil && s.r.Logger != nil {
-				s.r.Logger.Warn("write-through cache failure %v", err)
-			}
-		})
+	if s.RClient() != s.WClient() {
+		debugTrace("RClient >> %s",
+			strings.ReplaceAll(fmt.Sprintf("%+v", cmds), "RawCmd[", "\n  RawCmd["))
+		err := s.RClient().Do(radix.Pipeline(cmds...))
+		// debugTrace("RClient result => %v", err)
+		// Fail with a warning; in case this fails the data is eventually consistent.
+		// It is also possible that the replication won the race.
+		if err != nil && s.Logger != nil {
+			s.Logger.Warn("write-through cache failure %v", err)
+		}
 	}
 
 	return nil
@@ -320,21 +305,19 @@ func (s *EntStorage) DeleteEnt(e ent.Ent) error {
 	debugTrace(">> %s",
 		strings.ReplaceAll(fmt.Sprintf("%+v", cmds), "RawCmd[", "\n  RawCmd["))
 
-	err := s.r.WClient().Do(radix.Pipeline(cmds...))
+	err := s.WClient().Do(radix.Pipeline(cmds...))
 	if err != nil {
 		return err
 	}
 
-	if s.r.WClient() != s.r.RClient() {
+	if s.WClient() != s.RClient() {
 		// update write-through cache
-		s.goBackground(func() {
-			// debugTrace("RClient >> %s",
-			// 	strings.ReplaceAll(fmt.Sprintf("%+v", cmds), "RawCmd[", "\n  RawCmd["))
-			err := s.r.RClient().Do(radix.Pipeline(cmds...))
-			if err != nil && s.r.Logger != nil {
-				s.r.Logger.Warn("write-through cache failure %v", err)
-			}
-		})
+		// debugTrace("RClient >> %s",
+		// 	strings.ReplaceAll(fmt.Sprintf("%+v", cmds), "RawCmd[", "\n  RawCmd["))
+		err := s.RClient().Do(radix.Pipeline(cmds...))
+		if err != nil && s.Logger != nil {
+			s.Logger.Warn("write-through cache failure %v", err)
+		}
 	}
 
 	return nil
@@ -517,12 +500,7 @@ func encodeEntHSET(e Ent, buf, entKey []byte, version, fieldmap uint64) ([]byte,
 		c.Uint(version, 64)
 	}
 	e.EntEncode(&c, fieldmap)
-	respData := c.Buffer()
-	if c.err == nil {
-		debugTrace("encodeEntHSET %q", respData)
-		// _, c.err = w.w.Write(respData)
-	}
-	return respData, c.err
+	return c.Buffer(), c.err
 }
 
 // decodeEnt reads the result of a HGETALL command, populating e, id and version
