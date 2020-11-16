@@ -687,7 +687,7 @@ func (g *Codegen) codegenEnt(e *EntInfo) error {
 	if methodIsUndefined(mname) {
 		generatedMethods[mname] = true
 		g.f("// %s returns a JSON representation of e. Conforms to json.Marshaler.\n"+
-			"func (e *%s) %s() ([]byte, error) { return ent.JsonEncode(e) }\n\n",
+			"func (e *%s) %s() ([]byte, error) { return ent.JsonEncode(e, \"\") }\n\n",
 			mname,
 			e.sname, mname)
 	}
@@ -697,6 +697,15 @@ func (g *Codegen) codegenEnt(e *EntInfo) error {
 		generatedMethods[mname] = true
 		g.f("// %s populates the ent from JSON data. Conforms to json.Unmarshaler.\n"+
 			"func (e *%s) %s(b []byte) error { return ent.JsonDecode(e, b) }\n\n",
+			mname,
+			e.sname, mname)
+	}
+
+	mname = "String"
+	if methodIsUndefined(mname) {
+		generatedMethods[mname] = true
+		g.f("// %s returns a JSON representation of e.\n"+
+			"func (e *%s) %s() string { return ent.EntString(e) }\n\n",
 			mname,
 			e.sname, mname)
 	}
