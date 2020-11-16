@@ -1,6 +1,7 @@
 package mem
 
 import (
+	"fmt"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -81,7 +82,7 @@ func (s *EntStorage) putEnt(e Ent, id, version, changedFields uint64) error {
 	// we use doesn't support patching. Storage that writes fields to individual cells,
 	// like an SQL table or key-value store entry may make use of fieldmap to store/update
 	// only modified fields.
-	json, err := ent.JsonEncodeEnt(e, id, version, e.EntFields().Fieldmap)
+	json, err := ent.JsonEncodeEnt(e, id, version, e.EntFields().Fieldmap, "")
 	if err != nil {
 		return err
 	}
@@ -120,6 +121,7 @@ func (s *EntStorage) putEnt(e Ent, id, version, changedFields uint64) error {
 	if err != nil {
 		return err
 	}
+	debugTrace("indexEdits %+v\n", indexEdits)
 	entTypeName := e.EntTypeName()
 	for _, ed := range indexEdits {
 		key := s.indexKey(entTypeName, ed.Index.Name, ed.Key)
@@ -128,6 +130,21 @@ func (s *EntStorage) putEnt(e Ent, id, version, changedFields uint64) error {
 			m.Del(key)
 		} else {
 			debugTrace("index put %q => %v", key, ed.Value)
+			if !ed.IsCleanup && ed.Index.IsUnique() {
+				// check for collision
+				ids, err := s.indexGet(entTypeName, ed.Index.Name, string(ed.Key))
+				if err != nil {
+					return err
+				}
+				if len(ids) > 0 {
+					if ids[0] == id {
+						continue
+					}
+					// TODO: a semantic error; something the caller can easily identify as "index conflict"
+					return fmt.Errorf("unique index conflict %s.%s with ent #%d",
+						entTypeName, ed.Index.Name, ids[0])
+				}
+			}
 			m.Put(key, ent.IdSet(ed.Value).Encode())
 		}
 	}
