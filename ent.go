@@ -17,8 +17,6 @@ type Ent interface {
 	EntDecodePartial(c Decoder, fields uint64) (version uint64)
 	EntIndexes() []EntIndex
 	EntFields() Fields
-
-	entUnsafePtr() unsafe.Pointer // pointer to EntBase (and thus header of Ent)
 }
 
 // EntBase is the foundation for all ent types.
@@ -54,8 +52,19 @@ var (
 
 type Id uint64
 
-func entBase(e Ent) *EntBase                    { return (*EntBase)(e.entUnsafePtr()) }
-func (e *EntBase) entUnsafePtr() unsafe.Pointer { return unsafe.Pointer(e) }
+// emptyInterface is the header for an interface{} value. From go src/reflect/value.go
+type emptyInterface struct {
+	typ  *int
+	word unsafe.Pointer
+}
+
+func entBase(e Ent) (eb *EntBase) {
+	ef := (*emptyInterface)(unsafe.Pointer(&e))
+	if ef.typ != nil {
+		eb = (*EntBase)(ef.word)
+	}
+	return
+}
 
 func (e *EntBase) Id() uint64              { return e.id }
 func (e *EntBase) Version() uint64         { return e.version }
