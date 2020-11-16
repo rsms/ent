@@ -1,9 +1,7 @@
 package ent
 
 import (
-	"bytes"
 	"reflect"
-	"text/tabwriter"
 )
 
 // ReprFlags are changes behavior of Repr
@@ -16,31 +14,17 @@ const (
 
 // Repr formats a human-readable representation of an ent. It only includes fields in fieldmap.
 func Repr(e Ent, fieldmap uint64, flags ReprFlags) ([]byte, error) {
-	c := JsonEncoder{BareKeys: true}
-	c.Builder.Indent = "\t"
-	c.Builder.KeyTerm = []byte(":\t")
-
 	if (flags & ReprOmitEmpty) != 0 {
 		fieldmap &= ^FieldsWithEmptyValue(e)
 	}
-
-	// encode ent
+	c := JsonEncoder{BareKeys: true}
+	c.Builder.Indent = "  "
 	c.BeginEnt(e.Version())
 	c.Key(FieldNameId)
 	c.Uint(e.Id(), 64)
 	e.EntEncode(&c, fieldmap)
 	c.EndEnt()
-	if err := c.Err(); err != nil {
-		return nil, err
-	}
-
-	// thread the results through tabwriter for pretty columnar output
-	var wbuf bytes.Buffer
-	minwidth, tabwidth, padding := 2, 2, 1
-	w := tabwriter.NewWriter(&wbuf, minwidth, tabwidth, padding, ' ', 0)
-	w.Write(c.Bytes())
-	err := w.Flush()
-	return wbuf.Bytes(), err
+	return c.Bytes(), c.Err()
 }
 
 // FieldsWithEmptyValue returns a fieldmap of all non-numeric non-bool fields which has a
