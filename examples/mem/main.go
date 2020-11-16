@@ -51,8 +51,9 @@ func (e *Account) SetWidth(w int) {
 	}
 }
 
+// MarshalJSON overrides the ent version to produce pretty-printed JSON
 func (e *Account) MarshalJSON() ([]byte, error) {
-	return ent.JsonEncode(e)
+	return ent.JsonEncode(e, "  ")
 }
 
 // type Location struct {

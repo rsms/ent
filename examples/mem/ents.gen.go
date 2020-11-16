@@ -120,6 +120,9 @@ func (e Account) EntNew() ent.Ent { return &Account{} }
 // UnmarshalJSON populates the ent from JSON data. Conforms to json.Unmarshaler.
 func (e *Account) UnmarshalJSON(b []byte) error { return ent.JsonDecode(e, b) }
 
+// String returns a JSON representation of e.
+func (e *Account) String() string { return ent.EntString(e) }
+
 // Create a new account ent in storage
 func (e *Account) Create(storage ent.Storage) error { return ent.CreateEnt(e, storage) }
 

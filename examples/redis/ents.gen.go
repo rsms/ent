@@ -45,10 +45,13 @@ func (e Account) EntTypeName() string { return "account" }
 func (e Account) EntNew() ent.Ent { return &Account{} }
 
 // MarshalJSON returns a JSON representation of e. Conforms to json.Marshaler.
-func (e *Account) MarshalJSON() ([]byte, error) { return ent.JsonEncode(e) }
+func (e *Account) MarshalJSON() ([]byte, error) { return ent.JsonEncode(e, "") }
 
 // UnmarshalJSON populates the ent from JSON data. Conforms to json.Unmarshaler.
 func (e *Account) UnmarshalJSON(b []byte) error { return ent.JsonDecode(e, b) }
+
+// String returns a JSON representation of e.
+func (e *Account) String() string { return ent.EntString(e) }
 
 // Create a new account ent in storage
 func (e *Account) Create(storage ent.Storage) error { return ent.CreateEnt(e, storage) }
