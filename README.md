@@ -35,7 +35,7 @@ Features:
 Ent uses Go structs. By adding `ent.EntBase` as the first embedded field in a struct, you have
 made it into an ent!
 
-Here's a simple example:
+Let's start by defining an "Account" struct type:
 
 ```go
 //go:generate entgen
