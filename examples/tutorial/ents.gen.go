@@ -86,20 +86,20 @@ func (e *Account) SetKind(v AccountKind)   { e.kind = v; ent.SetFieldChanged(&e.
 
 // ---- encode & decode methods ----
 
-func (e *Account) EntEncode(c ent.Encoder, fields uint64) {
-	if (fields & (1 << 0)) != 0 {
+func (e *Account) EntEncode(c ent.Encoder, fields ent.FieldSet) {
+	if fields.Has(0) {
 		c.Key("name")
 		c.Str(e.name)
 	}
-	if (fields & (1 << 1)) != 0 {
+	if fields.Has(1) {
 		c.Key("alias")
 		c.Str(e.displayName)
 	}
-	if (fields & (1 << 2)) != 0 {
+	if fields.Has(2) {
 		c.Key("email")
 		c.Str(e.email)
 	}
-	if (fields & (1 << 3)) != 0 {
+	if fields.Has(3) {
 		c.Key("kind")
 		c.Int(int64(e.kind), 32)
 	}
@@ -131,7 +131,7 @@ func (e *Account) EntDecode(c ent.Decoder) (id, version uint64) {
 }
 
 // EntDecodePartial is used internally by ent.Storage during updates.
-func (e *Account) EntDecodePartial(c ent.Decoder, fields uint64) (version uint64) {
+func (e *Account) EntDecodePartial(c ent.Decoder, fields ent.FieldSet) (version uint64) {
 	for n := 2; n > 0; {
 		switch string(c.Key()) {
 		case "":
@@ -141,13 +141,13 @@ func (e *Account) EntDecodePartial(c ent.Decoder, fields uint64) (version uint64
 			continue
 		case "email":
 			n--
-			if (fields & (1 << 2)) != 0 {
+			if fields.Has(2) {
 				e.email = c.Str()
 				continue
 			}
 		case "kind":
 			n--
-			if (fields & (1 << 3)) != 0 {
+			if fields.Has(3) {
 				e.kind = AccountKind(c.Int(32))
 				continue
 			}
@@ -173,7 +173,7 @@ var ent_Account_fields = ent.Fields{
 		"email",
 		"kind",
 	},
-	Fieldmap: 0b1111,
+	FieldSet: 0b1111,
 }
 
 // EntFields returns information about Account fields

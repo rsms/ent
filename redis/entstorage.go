@@ -8,7 +8,6 @@ import (
 
 	"github.com/mediocregopher/radix/v3"
 	"github.com/rsms/ent"
-	"github.com/rsms/go-bits"
 )
 
 func debugTrace(format string, args ...interface{}) {
@@ -140,15 +139,15 @@ func (s *EntStorage) IterateIds(entType string) ent.IdIterator {
 }
 
 // SaveEnt is part of the ent.Storage interface, used by TYPE.Save()
-func (s *EntStorage) Save(e Ent, fieldmap uint64) (nextVersion uint64, err error) {
+func (s *EntStorage) Save(e Ent, fields ent.FieldSet) (nextVersion uint64, err error) {
 	prevVersion := e.Version()
 	nextVersion = prevVersion + 1
-	err = s.putEnt(e, e.Id(), prevVersion, nextVersion, fieldmap)
+	err = s.putEnt(e, e.Id(), prevVersion, nextVersion, fields)
 	return
 }
 
 // CreateEnt is part of the ent.Storage interface, used by TYPE.Create()
-func (s *EntStorage) Create(e ent.Ent, fieldmap uint64) (id uint64, err error) {
+func (s *EntStorage) Create(e ent.Ent, fields ent.FieldSet) (id uint64, err error) {
 	id = e.Id()
 	if id == 0 {
 		// generate new ent id
@@ -157,19 +156,21 @@ func (s *EntStorage) Create(e ent.Ent, fieldmap uint64) (id uint64, err error) {
 			return
 		}
 	}
-	return id, s.putEnt(e, id, 0, 1, fieldmap)
+	return id, s.putEnt(e, id, 0, 1, fields)
 }
 
-func (s *EntStorage) putEnt(e ent.Ent, id, prevVersion, nextVersion, fieldmap uint64) error {
+func (s *EntStorage) putEnt(
+	e ent.Ent, id, prevVersion, nextVersion uint64, fields ent.FieldSet,
+) error {
 	entType := e.EntTypeName()
 	entKey := makeEntKey(entType, id)
 
-	debugTrace("putEnt %q key=%q fieldmap=%b (version %d -> %d)",
-		entType, entKey, fieldmap, prevVersion, nextVersion)
+	debugTrace("putEnt %q key=%q fields=%b (version %d -> %d)",
+		entType, entKey, fields, prevVersion, nextVersion)
 
 	// HSET fields
 	// respWriter := RWriter{buf: make([]byte, 0, 128)}
-	respData, err := encodeEntHSET(e, make([]byte, 0, 128), entKey, nextVersion, fieldmap)
+	respData, err := encodeEntHSET(e, make([]byte, 0, 128), entKey, nextVersion, fields)
 	if err != nil {
 		return err
 	}
@@ -189,7 +190,7 @@ func (s *EntStorage) putEnt(e ent.Ent, id, prevVersion, nextVersion, fieldmap ui
 		var currEnt ent.Ent
 		if prevVersion != 0 {
 			currEnt = e.EntNew()
-			currVersion, err := s.loadEntPartial(c, currEnt, entKey, fieldmap)
+			currVersion, err := s.loadEntPartial(c, currEnt, entKey, fields)
 			debugTrace("loadEntPartial %q => version=%v %+v", entKey, currVersion, currEnt)
 			if err != nil {
 				return err
@@ -205,7 +206,7 @@ func (s *EntStorage) putEnt(e ent.Ent, id, prevVersion, nextVersion, fieldmap ui
 		}
 
 		// update indexes
-		err = s.computeIndexEdits(currEnt, e, id, fieldmap, &cmds, &watchKeys,
+		err = s.computeIndexEdits(currEnt, e, id, fields, &cmds, &watchKeys,
 			func(key []byte, cmd radix.CmdAction) error {
 				// Perform command right now. We watch the key since
 				debugTrace(">> WATCH %s; %+v", key, cmd)
@@ -292,7 +293,7 @@ func (s *EntStorage) deleteEntWithoutIndexes(entKey []byte) error {
 }
 
 func (s *EntStorage) deleteEntWithIndexes(e ent.Ent, id uint64, entKey []byte) error {
-	allfields := e.EntFields().Fieldmap
+	allfields := e.EntFields().FieldSet
 	indexes := e.EntIndexes()
 	watchKeys := make([][]byte, 1, 1+len(indexes))
 	watchKeys[0] = entKey
@@ -385,12 +386,13 @@ func (s *EntStorage) entBatchWrite(entKey []byte, f func(radix.Conn) error) erro
 
 func (s *EntStorage) computeIndexEdits(
 	prevEnt, nextEnt Ent,
-	id, fieldmap uint64,
+	id uint64,
+	fields ent.FieldSet,
 	cmdsPtr *[]radix.CmdAction,
 	watchKeysPtr *[][]byte,
 	doNow func(key []byte, cmd radix.CmdAction) error, // only needed when nextEnt!=nil
 ) error {
-	indexEdits, err := ent.ComputeIndexEdits(nil, prevEnt, nextEnt, id, fieldmap)
+	indexEdits, err := ent.ComputeIndexEdits(nil, prevEnt, nextEnt, id, fields)
 	if err != nil {
 		return err
 	}
@@ -450,12 +452,13 @@ func (s *EntStorage) computeIndexEdits(
 // loadEntPartial
 // Note: If an ent is not found, this returns version=0 (it does NOT return ent.ErrNotFound)
 func (s *EntStorage) loadEntPartial(
-	c radix.Conn, e Ent, entKey []byte, fieldmap uint64) (version uint64, err error) {
+	c radix.Conn, e Ent, entKey []byte, fields ent.FieldSet,
+) (version uint64, err error) {
 	// list of keys to fetch
-	keys := make([]string, 1, bits.PopcountUint64(fieldmap)+1)
+	keys := make([]string, 1, fields.Len()+1)
 	keys[0] = ent.FieldNameVersion
 	for fieldIndex, fieldName := range e.EntFields().Names {
-		if (fieldmap & (1 << fieldIndex)) != 0 {
+		if (fields & (1 << fieldIndex)) != 0 {
 			keys = append(keys, fieldName)
 		}
 	}
@@ -483,7 +486,7 @@ func (s *EntStorage) loadEntPartial(
 				RReader: r,
 				keys:    keys,
 			}
-			version = e.EntDecodePartial(&c, fieldmap)
+			version = e.EntDecodePartial(&c, fields)
 
 			// discard any remaining unread values
 			for n > c.nread {
@@ -558,10 +561,12 @@ func makeGETEntIdCmd(key []byte, idOut *uint64) *RawCmdHexUint {
 	// }
 }
 
-// encodeEntHSET writes a HSET command on w with all fields in fieldmap for e.
+// encodeEntHSET writes a HSET command on w with all fields for e.
 // If version is not zero, then the ent.FieldNameVersion field is written as well.
-func encodeEntHSET(e Ent, buf, entKey []byte, version, fieldmap uint64) ([]byte, error) {
-	nfields := bits.PopcountUint64(fieldmap)
+func encodeEntHSET(
+	e Ent, buf, entKey []byte, version uint64, fields ent.FieldSet,
+) ([]byte, error) {
+	nfields := fields.Len()
 	if version != 0 {
 		nfields++
 	}
@@ -571,7 +576,7 @@ func encodeEntHSET(e Ent, buf, entKey []byte, version, fieldmap uint64) ([]byte,
 		c.Str(ent.FieldNameVersion)
 		c.Uint(version, 64)
 	}
-	e.EntEncode(&c, fieldmap)
+	e.EntEncode(&c, fields)
 	return c.Buffer(), c.err
 }
 

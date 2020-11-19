@@ -62,7 +62,7 @@ func (c *JsonDecoder) ListHeader() int {
 
 // JsonDecodeEntPartial is a utility function for decoding a partial ent.
 // It calls e.EntDecodePartial and thus is limited to fields that participate in indexes.
-func JsonDecodeEntPartial(e Ent, data []byte, fields uint64) (version uint64, err error) {
+func JsonDecodeEntPartial(e Ent, data []byte, fields FieldSet) (version uint64, err error) {
 	c := NewJsonDecoder(data)
 	if c.DictHeader() != 0 {
 		version = e.EntDecodePartial(c, fields)
@@ -76,7 +76,7 @@ func JsonDecodeEntPartial(e Ent, data []byte, fields uint64) (version uint64, er
 // The two following functions are used by ent.JsonEncode and ent.JsonDecode to expose a general
 // JSON codec as well as to implement MarshalJSON and UnmarshalJSON for Ent types.
 
-func JsonEncodeEnt(e Ent, id, version, fieldmap uint64, indent string) ([]byte, error) {
+func JsonEncodeEnt(e Ent, id, version uint64, fields FieldSet, indent string) ([]byte, error) {
 	c := JsonEncoder{}
 	c.Builder.Indent = indent
 	c.BeginEnt(version)
@@ -85,7 +85,7 @@ func JsonEncodeEnt(e Ent, id, version, fieldmap uint64, indent string) ([]byte, 
 	c.Key(FieldNameId)
 	c.Uint(id, 64)
 
-	e.EntEncode(&c, fieldmap)
+	e.EntEncode(&c, fields)
 	c.EndEnt()
 	return c.Bytes(), c.Err()
 }

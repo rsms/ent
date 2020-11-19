@@ -34,15 +34,15 @@ func debugTrace(format string, args ...interface{}) {
 	//fmt.Printf("TRACE "+format+"\n", args...)
 }
 
-func (s *EntStorage) Create(e Ent, fieldmap uint64) (id uint64, err error) {
+func (s *EntStorage) Create(e Ent, fields ent.FieldSet) (id uint64, err error) {
 	id = atomic.AddUint64(&s.idgen, 1)
-	err = s.putEnt(e, id, 1, fieldmap)
+	err = s.putEnt(e, id, 1, fields)
 	return
 }
 
-func (s *EntStorage) Save(e Ent, fieldmap uint64) (nextVersion uint64, err error) {
+func (s *EntStorage) Save(e Ent, fields ent.FieldSet) (nextVersion uint64, err error) {
 	nextVersion = e.Version() + 1
-	err = s.putEnt(e, e.Id(), nextVersion, fieldmap)
+	err = s.putEnt(e, e.Id(), nextVersion, fields)
 	return
 }
 
@@ -64,7 +64,7 @@ func (s *EntStorage) loadEnt(e Ent, data []byte) (version uint64, err error) {
 }
 
 func (s *EntStorage) Delete(e Ent, id uint64) error {
-	allfields := e.EntFields().Fieldmap
+	allfields := e.EntFields().FieldSet
 	key := s.entKey(e.EntTypeName(), id)
 
 	s.mu.Lock()
@@ -98,7 +98,7 @@ func (s *EntStorage) Delete(e Ent, id uint64) error {
 	return nil
 }
 
-func (s *EntStorage) putEnt(e Ent, id, version, changedFields uint64) error {
+func (s *EntStorage) putEnt(e Ent, id, version uint64, changedFields ent.FieldSet) error {
 	debugTrace("putEnt ent %q id=%d version=%d fieldmap=%b",
 		e.EntTypeName(), id, version, changedFields)
 
@@ -107,7 +107,7 @@ func (s *EntStorage) putEnt(e Ent, id, version, changedFields uint64) error {
 	// we use doesn't support patching. Storage that writes fields to individual cells,
 	// like an SQL table or key-value store entry may make use of fieldmap to store/update
 	// only modified fields.
-	json, err := ent.JsonEncodeEnt(e, id, version, e.EntFields().Fieldmap, "")
+	json, err := ent.JsonEncodeEnt(e, id, version, e.EntFields().FieldSet, "")
 	if err != nil {
 		return err
 	}
@@ -157,9 +157,11 @@ func (s *EntStorage) putEnt(e Ent, id, version, changedFields uint64) error {
 	return nil
 }
 
-func (s *EntStorage) updateIndexes(prevEnt, nextEnt Ent, id, fieldmap uint64, m *ScopedMap) error {
+func (s *EntStorage) updateIndexes(
+	prevEnt, nextEnt Ent, id uint64, fields ent.FieldSet, m *ScopedMap,
+) error {
 	// update indexes
-	indexEdits, err := ent.ComputeIndexEdits(s.indexGet, prevEnt, nextEnt, id, fieldmap)
+	indexEdits, err := ent.ComputeIndexEdits(s.indexGet, prevEnt, nextEnt, id, fields)
 	if err != nil {
 		return err
 	}

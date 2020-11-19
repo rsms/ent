@@ -865,13 +865,13 @@ func (g *Codegen) codegenEnt(e *EntInfo) error {
 			"Make sure to call entEncode from your EntEncode method",
 		)
 		generatedMethods[mname] = true
-		g.f("\nfunc (e *%s) %s(c ent.Encoder, fields uint64) {", e.sname, mname)
+		g.f("\nfunc (e *%s) %s(c ent.Encoder, fields ent.FieldSet) {", e.sname, mname)
 		// g.f("\n\teb := &e.EntBase\n")
 		for _, field := range e.fields {
 			g.pushPos(field.pos)
 			// Note: Rather than precomputing (1<<field.index), let the compiler apply constant
 			// evaluation instead. This makes the generated code more readable.
-			g.f("\tif (fields & (1 << %d)) != 0\t{", field.index)
+			g.f("\tif fields.Has(%d)\t{", field.index)
 			err := g.codegenEncodeField(field)
 			wstr(" }\n")
 			g.popPos()
@@ -1006,7 +1006,7 @@ func (g *Codegen) genEntFields(e *EntInfo) {
 		g.f("    %#v,\n", field.name)
 	}
 	g.f("  },\n")
-	g.f("  Fieldmap:\t0b%b,\n", fieldmap)
+	g.f("  FieldSet:\t0b%b,\n", fieldmap)
 	g.f("}\n\n")
 
 	g.f("// EntFields returns information about %s fields\n", e.sname)
@@ -1242,7 +1242,7 @@ func (g *Codegen) genEntDecodePartial(e *EntInfo, mname string) error {
 		}
 	}
 	g.f("\n// %s is used internally by ent.Storage during updates.\n", mname)
-	g.f("func (e *%s) %s(c ent.Decoder, fields uint64) (version uint64) {\n", e.sname, mname)
+	g.f("func (e *%s) %s(c ent.Decoder, fields ent.FieldSet) (version uint64) {\n", e.sname, mname)
 	g.f("  for n := %d; n > 0; {\n", len(indexedFields))
 	g.s("    switch string(c.Key()) {\n")
 	g.s("    case \"\": return\n")
@@ -1251,7 +1251,7 @@ func (g *Codegen) genEntDecodePartial(e *EntInfo, mname string) error {
 		g.pushPos(field.pos)
 		g.f("    case %#v:\n", field.name)
 		g.s("      n--\n")
-		g.f("      if (fields & (1 << %d)) != 0 {\n", field.index)
+		g.f("      if fields.Has(%d) {\n", field.index)
 		err := g.codegenDecodeField(field)
 		g.s("        continue\n")
 		g.s("      }\n")

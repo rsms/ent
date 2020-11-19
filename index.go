@@ -6,8 +6,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/rsms/go-bits"
 )
 
 // IndexGetter is used to look up an entry in an index
@@ -65,7 +63,8 @@ type StorageIndexEdit struct {
 func ComputeIndexEdits(
 	indexGet IndexGetter,
 	prevEnt, nextEnt Ent,
-	id, changedFields uint64,
+	id uint64,
+	changedFields FieldSet,
 ) ([]StorageIndexEdit, error) {
 	// Example:
 	//
@@ -107,13 +106,13 @@ func ComputeIndexEdits(
 	// if there is no previous ent, mark all fields as changed to ensure that a newly
 	// created ent's indexes are all properly created.
 	if prevEnt == nil {
-		changedFields = roEnt.EntFields().Fieldmap
+		changedFields = roEnt.EntFields().FieldSet
 	} else if prevEnt.EntTypeName() != entTypeName {
 		return nil, fmt.Errorf("different ent types (%s, %s)", prevEnt.EntTypeName(), entTypeName)
 	}
 
 	// allocate the max number of edits we may need up front
-	edits := make([]StorageIndexEdit, 0, bits.PopcountUint64(changedFields)*2)
+	edits := make([]StorageIndexEdit, 0, changedFields.Len()*2)
 
 	// reusable index key encoder
 	var indexKeyEncoder IndexKeyEncoder
@@ -123,7 +122,7 @@ func ComputeIndexEdits(
 	for i := range indexes {
 		x := &indexes[i] // *EntIndex
 
-		if (changedFields & x.Fields) == 0 {
+		if !changedFields.Contains(x.Fields) {
 			// none of the fields that this index depends on has changed
 			// fmt.Printf("[ComputeIndexEdits] index %s unaffected (not in changedFields)\n", x.Name)
 			continue
@@ -331,9 +330,9 @@ type IndexKeyEncoder struct {
 	values  []string
 }
 
-func (c *IndexKeyEncoder) EncodeKey(e Ent, fieldmap uint64) ([]byte, error) {
-	c.Reset(bits.PopcountUint64(fieldmap))
-	e.EntEncode(c, fieldmap)
+func (c *IndexKeyEncoder) EncodeKey(e Ent, fields FieldSet) ([]byte, error) {
+	c.Reset(fields.Len())
+	e.EntEncode(c, fields)
 	c.EndEnt()
 	return c.b.Bytes(), c.err
 }

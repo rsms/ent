@@ -192,76 +192,76 @@ func (e *Account) SetThingsChanged()     { ent.SetFieldChanged(&e.EntBase, 17) }
 
 // ---- encode & decode methods ----
 
-func (e *Account) EntEncode(c ent.Encoder, fields uint64) {
-	if (fields & (1 << 0)) != 0 {
+func (e *Account) EntEncode(c ent.Encoder, fields ent.FieldSet) {
+	if fields.Has(0) {
 		c.Key("name")
 		c.Str(e.name)
 	}
-	if (fields & (1 << 1)) != 0 {
+	if fields.Has(1) {
 		c.Key("w")
 		c.Int(int64(e.width), 64)
 	}
-	if (fields & (1 << 2)) != 0 {
+	if fields.Has(2) {
 		c.Key("h")
 		c.Int(int64(e.height), 64)
 	}
-	if (fields & (1 << 3)) != 0 {
+	if fields.Has(3) {
 		c.Key("uuid")
 		c.Blob(e.uuid[:])
 	}
-	if (fields & (1 << 4)) != 0 {
+	if fields.Has(4) {
 		c.Key("flag")
 		c.Uint(uint64(e.flag), 16)
 	}
-	if (fields & (1 << 5)) != 0 {
+	if fields.Has(5) {
 		c.Key("score")
 		c.Float(float64(e.score), 32)
 	}
-	if (fields & (1 << 6)) != 0 {
+	if fields.Has(6) {
 		c.Key("picture")
 		c.Blob(e.picture)
 	}
-	if (fields & (1 << 7)) != 0 {
+	if fields.Has(7) {
 		c.Key("email")
 		c.Str(e.email)
 	}
-	if (fields & (1 << 8)) != 0 {
+	if fields.Has(8) {
 		c.Key("email_verified")
 		c.Bool(e.emailVerified)
 	}
-	if (fields & (1 << 9)) != 0 {
+	if fields.Has(9) {
 		c.Key("deleted")
 		c.Bool(e.Deleted)
 	}
-	if (fields & (1 << 10)) != 0 {
+	if fields.Has(10) {
 		c.Key("pwhash")
 		c.Str(e.passwordHash)
 	}
-	if (fields & (1 << 11)) != 0 {
+	if fields.Has(11) {
 		c.Key("thing")
 		c.Int(int64(e.thing), 64)
 	}
-	if (fields & (1 << 12)) != 0 {
+	if fields.Has(12) {
 		c.Key("foo")
 		ent_encode_Vi00(c, e.foo)
 	}
-	if (fields & (1 << 13)) != 0 {
+	if fields.Has(13) {
 		c.Key("foofoo")
 		ent_encode_VVi02(c, e.foofoo)
 	}
-	if (fields & (1 << 14)) != 0 {
+	if fields.Has(14) {
 		c.Key("data")
 		c.Blob(e.data)
 	}
-	if (fields & (1 << 15)) != 0 {
+	if fields.Has(15) {
 		c.Key("rgb")
 		ent_encode_Vi00(c, e.rgb[:])
 	}
-	if (fields & (1 << 16)) != 0 {
+	if fields.Has(16) {
 		c.Key("threebytes")
 		c.Blob(e.threebytes[:])
 	}
-	if (fields & (1 << 17)) != 0 {
+	if fields.Has(17) {
 		c.Key("things")
 		ent_encode_Msi00(c, e.things)
 	}
@@ -321,7 +321,7 @@ func (e *Account) EntDecode(c ent.Decoder) (id, version uint64) {
 }
 
 // EntDecodePartial is used internally by ent.Storage during updates.
-func (e *Account) EntDecodePartial(c ent.Decoder, fields uint64) (version uint64) {
+func (e *Account) EntDecodePartial(c ent.Decoder, fields ent.FieldSet) (version uint64) {
 	for n := 7; n > 0; {
 		switch string(c.Key()) {
 		case "":
@@ -331,43 +331,43 @@ func (e *Account) EntDecodePartial(c ent.Decoder, fields uint64) (version uint64
 			continue
 		case "w":
 			n--
-			if (fields & (1 << 1)) != 0 {
+			if fields.Has(1) {
 				e.width = int(c.Int(64))
 				continue
 			}
 		case "h":
 			n--
-			if (fields & (1 << 2)) != 0 {
+			if fields.Has(2) {
 				e.height = int(c.Int(64))
 				continue
 			}
 		case "uuid":
 			n--
-			if (fields & (1 << 3)) != 0 {
+			if fields.Has(3) {
 				e.uuid = uuid.UUID(ent_slice_to_A16_u01(c.Blob()))
 				continue
 			}
 		case "flag":
 			n--
-			if (fields & (1 << 4)) != 0 {
+			if fields.Has(4) {
 				e.flag = uint16(c.Uint(16))
 				continue
 			}
 		case "score":
 			n--
-			if (fields & (1 << 5)) != 0 {
+			if fields.Has(5) {
 				e.score = float32(c.Float(32))
 				continue
 			}
 		case "picture":
 			n--
-			if (fields & (1 << 6)) != 0 {
+			if fields.Has(6) {
 				e.picture = c.Blob()
 				continue
 			}
 		case "email":
 			n--
-			if (fields & (1 << 7)) != 0 {
+			if fields.Has(7) {
 				e.email = c.Str()
 				continue
 			}
@@ -421,7 +421,7 @@ var ent_Account_fields = ent.Fields{
 		"threebytes",
 		"things",
 	},
-	Fieldmap: 0b111111111111111111,
+	FieldSet: 0b111111111111111111,
 }
 
 // EntFields returns information about Account fields
@@ -505,12 +505,12 @@ func (e *Department) SetBuilding(v Building) { e.building = v; ent.SetFieldChang
 
 // ---- encode & decode methods ----
 
-func (e *Department) EntEncode(c ent.Encoder, fields uint64) {
-	if (fields & (1 << 0)) != 0 {
+func (e *Department) EntEncode(c ent.Encoder, fields ent.FieldSet) {
+	if fields.Has(0) {
 		c.Key("name")
 		c.Str(e.name)
 	}
-	if (fields & (1 << 1)) != 0 {
+	if fields.Has(1) {
 		c.Key("building")
 		c.Int(int64(e.building), 32)
 	}
@@ -538,7 +538,7 @@ func (e *Department) EntDecode(c ent.Decoder) (id, version uint64) {
 }
 
 // EntDecodePartial is used internally by ent.Storage during updates.
-func (e *Department) EntDecodePartial(c ent.Decoder, fields uint64) (version uint64) {
+func (e *Department) EntDecodePartial(c ent.Decoder, fields ent.FieldSet) (version uint64) {
 	for n := 1; n > 0; {
 		switch string(c.Key()) {
 		case "":
@@ -548,7 +548,7 @@ func (e *Department) EntDecodePartial(c ent.Decoder, fields uint64) (version uin
 			continue
 		case "building":
 			n--
-			if (fields & (1 << 1)) != 0 {
+			if fields.Has(1) {
 				e.building = Building(c.Int(32))
 				continue
 			}
@@ -570,7 +570,7 @@ var ent_Department_fields = ent.Fields{
 		"name",
 		"building",
 	},
-	Fieldmap: 0b11,
+	FieldSet: 0b11,
 }
 
 // EntFields returns information about Department fields
