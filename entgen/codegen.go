@@ -703,7 +703,7 @@ func (g *Codegen) codegenEnt(e *EntInfo) error {
 	if methodIsUndefined(mname) {
 		generatedMethods[mname] = true
 		g.f("// %s returns a JSON representation of e.\n"+
-			"func (e *%s) %s() string { return ent.EntString(e) }\n\n",
+			"func (e %s) %s() string { return ent.EntString(&e) }\n\n",
 			mname,
 			e.sname, mname)
 	}
@@ -741,6 +741,15 @@ func (g *Codegen) codegenEnt(e *EntInfo) error {
 		g.f("// %s deletes this ent from storage. This can usually not be undone.\n"+
 			"func (e *%s) %s() error\t{ return ent.DeleteEnt(e) }\n",
 			mname,
+			e.sname, mname)
+	}
+
+	mname = "Iterator"
+	if methodIsUndefined(mname) {
+		generatedMethods[mname] = true
+		g.f("// %s returns an iterator over all %s ents. Order is undefined.\n"+
+			"func (e %s) %s(s ent.Storage) ent.EntIterator\t{ return s.IterateEnts(&e) }\n",
+			mname, e.sname,
 			e.sname, mname)
 	}
 
@@ -1016,7 +1025,8 @@ func genFieldmap(e *EntInfo, fields []*EntField) string {
 }
 
 func (g *Codegen) genFindTYPEByINDEX(e *EntInfo, fx *EntFieldIndex) error {
-	svar, cvar, rvar, evar, errvar, tmpvar, limitvar := "s", "c", "r", "e", "err", "v", "limit"
+	svar, cvar, rvar, evar, errvar, tmpvar := "s", "c", "r", "e", "err", "v"
+	limitvar, flagsarg := "limit", "fl"
 
 	// package names
 	var pkgnames map[string]struct{}
@@ -1063,6 +1073,8 @@ func (g *Codegen) genFindTYPEByINDEX(e *EntInfo, fx *EntFieldIndex) error {
 			tmpvar = "_" + tmpvar
 		} else if argname == limitvar {
 			limitvar = "_" + limitvar
+		} else if argname == flagsarg {
+			flagsarg = "_" + flagsarg
 		}
 	}
 
@@ -1113,14 +1125,15 @@ func (g *Codegen) genFindTYPEByINDEX(e *EntInfo, fx *EntFieldIndex) error {
 	fname := "Load" + e.sname + "By" + capitalize(fx.name)
 	if fx.IsUnique() {
 		g.f("// %s loads %s %s\n", fname, e.sname, argsComment)
-		g.f("func %s(%s ent.Storage, %s) (*%s, error)\t{\n", fname, svar, params, e.sname)
+		g.f("func %s(%s ent.Storage, %s, %s ...ent.LookupFlags) (*%s, error)\t{\n",
+			fname, svar, params, flagsarg, e.sname)
 		g.f("  %s := &%s{}\n", evar, e.sname)
 		if useSingleStringKeyOpt {
-			g.f("  %s := ent.LoadEntByIndexKey(%s, %s, &ent_%s_idx[%d], %s)\n",
-				errvar, svar, evar, e.sname, fx.index, arg0)
+			g.f("  %s := ent.LoadEntByIndexKey(%s, %s, &ent_%s_idx[%d], %s, %s)\n",
+				errvar, svar, evar, e.sname, fx.index, arg0, flagsarg)
 		} else {
-			g.f("  %s := ent.LoadEntByIndex(%s, %s, &ent_%s_idx[%d], %d, %s)\n",
-				errvar, svar, evar, e.sname, fx.index, len(fx.fields), keyEncoderCode)
+			g.f("  %s := ent.LoadEntByIndex(%s, %s, &ent_%s_idx[%d], %s, %d, %s)\n",
+				errvar, svar, evar, e.sname, fx.index, flagsarg, len(fx.fields), keyEncoderCode)
 		}
 		g.f("  return %s, %s\n", evar, errvar)
 		g.s("}\n\n")
@@ -1130,15 +1143,16 @@ func (g *Codegen) genFindTYPEByINDEX(e *EntInfo, fx *EntFieldIndex) error {
 			return err
 		}
 		g.f("// %s loads all %s ents %s\n", fname, e.sname, argsComment)
-		g.f("func %s(%s ent.Storage, %s, %s int) ([]*%s, error)\t{\n",
-			fname, svar, params, limitvar, e.sname)
+		g.f("func %s(%s ent.Storage, %s, %s int, %s ...ent.LookupFlags) ([]*%s, error)\t{\n",
+			fname, svar, params, limitvar, flagsarg, e.sname)
 		g.f("  %s := &%s{}\n", evar, e.sname)
 		if useSingleStringKeyOpt {
-			g.f("  %s, %s := %s.LoadEntsByIndex(%s, &ent_%s_idx[%d], %s, %s)\n",
-				rvar, errvar, svar, evar, e.sname, fx.index, arg0, limitvar)
+			g.f("  %s, %s := ent.LoadEntsByIndexKey(%s, %s, &ent_%s_idx[%d], %s, %s, %s)\n",
+				rvar, errvar, svar, evar, e.sname, fx.index, arg0, limitvar, flagsarg)
 		} else {
-			g.f("  %s, %s := ent.LoadEntsByIndex(%s, %s, &ent_%s_idx[%d], %d, %s, %s)\n",
-				rvar, errvar, svar, evar, e.sname, fx.index, len(fx.fields), limitvar, keyEncoderCode)
+			g.f("  %s, %s := ent.LoadEntsByIndex(%s, %s, &ent_%s_idx[%d], %s, %s, %d, %s)\n",
+				rvar, errvar,
+				svar, evar, e.sname, fx.index, limitvar, flagsarg, len(fx.fields), keyEncoderCode)
 		}
 		g.f("  return %s(%s), %s\n", sliceCast, rvar, errvar)
 		g.s("}\n\n")
@@ -1149,25 +1163,26 @@ func (g *Codegen) genFindTYPEByINDEX(e *EntInfo, fx *EntFieldIndex) error {
 	fname = "Find" + e.sname + "By" + capitalize(fx.name)
 	if fx.IsUnique() {
 		g.f("// %s looks up %s id %s\n", fname, e.sname, argsComment)
-		g.f("func %s(%s ent.Storage, %s) (uint64, error)\t{\n", fname, svar, params)
+		g.f("func %s(%s ent.Storage, %s, %s ...ent.LookupFlags) (uint64, error)\t{\n",
+			fname, svar, params, flagsarg)
 		if useSingleStringKeyOpt {
-			g.f("  return ent.FindEntIdByIndexKey(%s, %#v, &ent_%s_idx[%d], %s)\n",
-				svar, e.name, e.sname, fx.index, arg0)
+			g.f("  return ent.FindIdByIndexKey(%s, %#v, &ent_%s_idx[%d], %s, %s)\n",
+				svar, e.name, e.sname, fx.index, arg0, flagsarg)
 		} else {
-			g.f("  return ent.FindEntIdByIndex(%s, %#v, &ent_%s_idx[%d], %d, %s)\n",
-				svar, e.name, e.sname, fx.index, len(fx.fields), keyEncoderCode)
+			g.f("  return ent.FindIdByIndex(%s, %#v, &ent_%s_idx[%d], %s, %d, %s)\n",
+				svar, e.name, e.sname, fx.index, flagsarg, len(fx.fields), keyEncoderCode)
 		}
 		g.s("}\n\n")
 	} else {
 		g.f("// %s looks up %s ids %s\n", fname, e.sname, argsComment)
-		g.f("func %s(%s ent.Storage, %s, %s int) ([]uint64, error)\t{\n",
-			fname, svar, params, limitvar)
+		g.f("func %s(%s ent.Storage, %s, %s int, %s ...ent.LookupFlags) ([]uint64, error)\t{\n",
+			fname, svar, params, limitvar, flagsarg)
 		if useSingleStringKeyOpt {
-			g.f("  return %s.FindEntIdsByIndex(%#v, &ent_%s_idx[%d], %s, %s)\n",
-				svar, e.name, e.sname, fx.index, arg0, limitvar)
+			g.f("  return ent.FindIdsByIndexKey(%s, %#v, &ent_%s_idx[%d], %s, %s, %s)\n",
+				svar, e.name, e.sname, fx.index, arg0, limitvar, flagsarg)
 		} else {
-			g.f("  return ent.FindEntIdsByIndex(%s, %#v, &ent_%s_idx[%d], %d, %s, %s)\n",
-				svar, e.name, e.sname, fx.index, len(fx.fields), limitvar, keyEncoderCode)
+			g.f("  return ent.FindIdsByIndex(%s, %#v, &ent_%s_idx[%d], %s, %s, %d, %s)\n",
+				svar, e.name, e.sname, fx.index, limitvar, flagsarg, len(fx.fields), keyEncoderCode)
 		}
 		g.s("}\n\n")
 	}

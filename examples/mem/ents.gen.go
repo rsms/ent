@@ -18,65 +18,65 @@ func LoadAccountById(storage ent.Storage, id uint64) (*Account, error) {
 }
 
 // LoadAccountByEmail loads Account with email
-func LoadAccountByEmail(s ent.Storage, email string) (*Account, error) {
+func LoadAccountByEmail(s ent.Storage, email string, fl ...ent.LookupFlags) (*Account, error) {
 	e := &Account{}
-	err := ent.LoadEntByIndexKey(s, e, &ent_Account_idx[0], []byte(email))
+	err := ent.LoadEntByIndexKey(s, e, &ent_Account_idx[0], []byte(email), fl)
 	return e, err
 }
 
 // FindAccountByEmail looks up Account id with email
-func FindAccountByEmail(s ent.Storage, email string) (uint64, error) {
-	return ent.FindEntIdByIndexKey(s, "account", &ent_Account_idx[0], []byte(email))
+func FindAccountByEmail(s ent.Storage, email string, fl ...ent.LookupFlags) (uint64, error) {
+	return ent.FindIdByIndexKey(s, "account", &ent_Account_idx[0], []byte(email), fl)
 }
 
 // LoadAccountByFlag loads all Account ents with flag
-func LoadAccountByFlag(s ent.Storage, flag uint16, limit int) ([]*Account, error) {
+func LoadAccountByFlag(s ent.Storage, flag uint16, limit int, fl ...ent.LookupFlags) ([]*Account, error) {
 	e := &Account{}
-	r, err := ent.LoadEntsByIndex(s, e, &ent_Account_idx[1], 1, limit, func(c ent.Encoder) {
+	r, err := ent.LoadEntsByIndex(s, e, &ent_Account_idx[1], limit, fl, 1, func(c ent.Encoder) {
 		c.Uint(uint64(flag), 16)
 	})
 	return ent_Account_slice_cast(r), err
 }
 
 // FindAccountByFlag looks up Account ids with flag
-func FindAccountByFlag(s ent.Storage, flag uint16, limit int) ([]uint64, error) {
-	return ent.FindEntIdsByIndex(s, "account", &ent_Account_idx[1], 1, limit, func(c ent.Encoder) {
+func FindAccountByFlag(s ent.Storage, flag uint16, limit int, fl ...ent.LookupFlags) ([]uint64, error) {
+	return ent.FindIdsByIndex(s, "account", &ent_Account_idx[1], limit, fl, 1, func(c ent.Encoder) {
 		c.Uint(uint64(flag), 16)
 	})
 }
 
 // LoadAccountByPicture loads all Account ents with picture
-func LoadAccountByPicture(s ent.Storage, picture []byte, limit int) ([]*Account, error) {
+func LoadAccountByPicture(s ent.Storage, picture []byte, limit int, fl ...ent.LookupFlags) ([]*Account, error) {
 	e := &Account{}
-	r, err := s.LoadEntsByIndex(e, &ent_Account_idx[2], picture, limit)
+	r, err := ent.LoadEntsByIndexKey(s, e, &ent_Account_idx[2], picture, limit, fl)
 	return ent_Account_slice_cast(r), err
 }
 
 // FindAccountByPicture looks up Account ids with picture
-func FindAccountByPicture(s ent.Storage, picture []byte, limit int) ([]uint64, error) {
-	return s.FindEntIdsByIndex("account", &ent_Account_idx[2], picture, limit)
+func FindAccountByPicture(s ent.Storage, picture []byte, limit int, fl ...ent.LookupFlags) ([]uint64, error) {
+	return ent.FindIdsByIndexKey(s, "account", &ent_Account_idx[2], picture, limit, fl)
 }
 
 // LoadAccountByScore loads all Account ents with score
-func LoadAccountByScore(s ent.Storage, score float32, limit int) ([]*Account, error) {
+func LoadAccountByScore(s ent.Storage, score float32, limit int, fl ...ent.LookupFlags) ([]*Account, error) {
 	e := &Account{}
-	r, err := ent.LoadEntsByIndex(s, e, &ent_Account_idx[3], 1, limit, func(c ent.Encoder) {
+	r, err := ent.LoadEntsByIndex(s, e, &ent_Account_idx[3], limit, fl, 1, func(c ent.Encoder) {
 		c.Float(float64(score), 32)
 	})
 	return ent_Account_slice_cast(r), err
 }
 
 // FindAccountByScore looks up Account ids with score
-func FindAccountByScore(s ent.Storage, score float32, limit int) ([]uint64, error) {
-	return ent.FindEntIdsByIndex(s, "account", &ent_Account_idx[3], 1, limit, func(c ent.Encoder) {
+func FindAccountByScore(s ent.Storage, score float32, limit int, fl ...ent.LookupFlags) ([]uint64, error) {
+	return ent.FindIdsByIndex(s, "account", &ent_Account_idx[3], limit, fl, 1, func(c ent.Encoder) {
 		c.Float(float64(score), 32)
 	})
 }
 
 // LoadAccountBySize loads all Account ents matching width AND height
-func LoadAccountBySize(s ent.Storage, width, height int, limit int) ([]*Account, error) {
+func LoadAccountBySize(s ent.Storage, width, height int, limit int, fl ...ent.LookupFlags) ([]*Account, error) {
 	e := &Account{}
-	r, err := ent.LoadEntsByIndex(s, e, &ent_Account_idx[4], 2, limit, func(c ent.Encoder) {
+	r, err := ent.LoadEntsByIndex(s, e, &ent_Account_idx[4], limit, fl, 2, func(c ent.Encoder) {
 		c.Key("w")
 		c.Int(int64(width), 64)
 		c.Key("h")
@@ -86,8 +86,8 @@ func LoadAccountBySize(s ent.Storage, width, height int, limit int) ([]*Account,
 }
 
 // FindAccountBySize looks up Account ids matching width AND height
-func FindAccountBySize(s ent.Storage, width, height int, limit int) ([]uint64, error) {
-	return ent.FindEntIdsByIndex(s, "account", &ent_Account_idx[4], 2, limit, func(c ent.Encoder) {
+func FindAccountBySize(s ent.Storage, width, height int, limit int, fl ...ent.LookupFlags) ([]uint64, error) {
+	return ent.FindIdsByIndex(s, "account", &ent_Account_idx[4], limit, fl, 2, func(c ent.Encoder) {
 		c.Key("w")
 		c.Int(int64(width), 64)
 		c.Key("h")
@@ -96,17 +96,17 @@ func FindAccountBySize(s ent.Storage, width, height int, limit int) ([]uint64, e
 }
 
 // LoadAccountByUuid loads Account with uuid_
-func LoadAccountByUuid(s ent.Storage, uuid_ uuid.UUID) (*Account, error) {
+func LoadAccountByUuid(s ent.Storage, uuid_ uuid.UUID, fl ...ent.LookupFlags) (*Account, error) {
 	e := &Account{}
-	err := ent.LoadEntByIndex(s, e, &ent_Account_idx[5], 1, func(c ent.Encoder) {
+	err := ent.LoadEntByIndex(s, e, &ent_Account_idx[5], fl, 1, func(c ent.Encoder) {
 		c.Blob(uuid_[:])
 	})
 	return e, err
 }
 
 // FindAccountByUuid looks up Account id with uuid_
-func FindAccountByUuid(s ent.Storage, uuid_ uuid.UUID) (uint64, error) {
-	return ent.FindEntIdByIndex(s, "account", &ent_Account_idx[5], 1, func(c ent.Encoder) {
+func FindAccountByUuid(s ent.Storage, uuid_ uuid.UUID, fl ...ent.LookupFlags) (uint64, error) {
+	return ent.FindIdByIndex(s, "account", &ent_Account_idx[5], fl, 1, func(c ent.Encoder) {
 		c.Blob(uuid_[:])
 	})
 }
@@ -121,7 +121,7 @@ func (e Account) EntNew() ent.Ent { return &Account{} }
 func (e *Account) UnmarshalJSON(b []byte) error { return ent.JsonDecode(e, b) }
 
 // String returns a JSON representation of e.
-func (e *Account) String() string { return ent.EntString(e) }
+func (e Account) String() string { return ent.EntString(&e) }
 
 // Create a new account ent in storage
 func (e *Account) Create(storage ent.Storage) error { return ent.CreateEnt(e, storage) }
@@ -134,6 +134,9 @@ func (e *Account) Reload() error { return ent.ReloadEnt(e) }
 
 // PermanentlyDelete deletes this ent from storage. This can usually not be undone.
 func (e *Account) PermanentlyDelete() error { return ent.DeleteEnt(e) }
+
+// Iterator returns an iterator over all Account ents. Order is undefined.
+func (e Account) Iterator(s ent.Storage) ent.EntIterator { return s.IterateEnts(&e) }
 
 // ---- field accessor methods ----
 
@@ -437,6 +440,150 @@ var ent_Account_idx = []ent.EntIndex{
 // EntIndexes returns information about secondary indexes
 func (e *Account) EntIndexes() []ent.EntIndex { return ent_Account_idx }
 
+// ----------------------------------------------------------------------------
+// Department
+
+// LoadDepartmentById loads Department with id from storage
+func LoadDepartmentById(storage ent.Storage, id uint64) (*Department, error) {
+	e := &Department{}
+	return e, ent.LoadEntById(e, storage, id)
+}
+
+// LoadDepartmentByBuilding loads all Department ents with building
+func LoadDepartmentByBuilding(s ent.Storage, building Building, limit int, fl ...ent.LookupFlags) ([]*Department, error) {
+	e := &Department{}
+	r, err := ent.LoadEntsByIndex(s, e, &ent_Department_idx[0], limit, fl, 1, func(c ent.Encoder) {
+		c.Int(int64(building), 32)
+	})
+	return ent_Department_slice_cast(r), err
+}
+
+// FindDepartmentByBuilding looks up Department ids with building
+func FindDepartmentByBuilding(s ent.Storage, building Building, limit int, fl ...ent.LookupFlags) ([]uint64, error) {
+	return ent.FindIdsByIndex(s, "dept", &ent_Department_idx[0], limit, fl, 1, func(c ent.Encoder) {
+		c.Int(int64(building), 32)
+	})
+}
+
+// EntTypeName returns the ent's storage name ("dept")
+func (e Department) EntTypeName() string { return "dept" }
+
+// EntNew returns a new empty Department. Used by the ent package for loading ents.
+func (e Department) EntNew() ent.Ent { return &Department{} }
+
+// MarshalJSON returns a JSON representation of e. Conforms to json.Marshaler.
+func (e *Department) MarshalJSON() ([]byte, error) { return ent.JsonEncode(e, "") }
+
+// UnmarshalJSON populates the ent from JSON data. Conforms to json.Unmarshaler.
+func (e *Department) UnmarshalJSON(b []byte) error { return ent.JsonDecode(e, b) }
+
+// String returns a JSON representation of e.
+func (e Department) String() string { return ent.EntString(&e) }
+
+// Create a new dept ent in storage
+func (e *Department) Create(storage ent.Storage) error { return ent.CreateEnt(e, storage) }
+
+// Save pending changes to whatever storage this ent was created or loaded from
+func (e *Department) Save() error { return ent.SaveEnt(e) }
+
+// Reload fields to latest values from storage, discarding any unsaved changes
+func (e *Department) Reload() error { return ent.ReloadEnt(e) }
+
+// PermanentlyDelete deletes this ent from storage. This can usually not be undone.
+func (e *Department) PermanentlyDelete() error { return ent.DeleteEnt(e) }
+
+// Iterator returns an iterator over all Department ents. Order is undefined.
+func (e Department) Iterator(s ent.Storage) ent.EntIterator { return s.IterateEnts(&e) }
+
+// ---- field accessor methods ----
+
+func (e *Department) Name() string       { return e.name }
+func (e *Department) Building() Building { return e.building }
+
+func (e *Department) SetName(v string)       { e.name = v; ent.SetFieldChanged(&e.EntBase, 0) }
+func (e *Department) SetBuilding(v Building) { e.building = v; ent.SetFieldChanged(&e.EntBase, 1) }
+
+// ---- encode & decode methods ----
+
+func (e *Department) EntEncode(c ent.Encoder, fields uint64) {
+	if (fields & (1 << 0)) != 0 {
+		c.Key("name")
+		c.Str(e.name)
+	}
+	if (fields & (1 << 1)) != 0 {
+		c.Key("building")
+		c.Int(int64(e.building), 32)
+	}
+}
+
+// EntDecode populates fields from a decoder
+func (e *Department) EntDecode(c ent.Decoder) (id, version uint64) {
+	for {
+		switch string(c.Key()) {
+		case "":
+			return
+		case ent.FieldNameId:
+			id = c.Uint(64)
+		case ent.FieldNameVersion:
+			version = c.Uint(64)
+		case "name":
+			e.name = c.Str()
+		case "building":
+			e.building = Building(c.Int(32))
+		default:
+			c.Discard()
+		}
+	}
+	return
+}
+
+// EntDecodePartial is used internally by ent.Storage during updates.
+func (e *Department) EntDecodePartial(c ent.Decoder, fields uint64) (version uint64) {
+	for n := 1; n > 0; {
+		switch string(c.Key()) {
+		case "":
+			return
+		case ent.FieldNameVersion:
+			version = c.Uint(64)
+			continue
+		case "building":
+			n--
+			if (fields & (1 << 1)) != 0 {
+				e.building = Building(c.Int(32))
+				continue
+			}
+		}
+		c.Discard()
+	}
+	return
+}
+
+// Symbolic field indices, for use with ent.*FieldChanged methods
+const (
+	ent_Department_f_name     = 0
+	ent_Department_f_building = 1
+)
+
+// EntFields returns information about Department fields
+var ent_Department_fields = ent.Fields{
+	Names: []string{
+		"name",
+		"building",
+	},
+	Fieldmap: 0b11,
+}
+
+// EntFields returns information about Department fields
+func (e Department) EntFields() ent.Fields { return ent_Department_fields }
+
+// Indexes (Name, Fields, Flags)
+var ent_Department_idx = []ent.EntIndex{
+	{"building", 1 << ent_Department_f_building, 0},
+}
+
+// EntIndexes returns information about secondary indexes
+func (e *Department) EntIndexes() []ent.EntIndex { return ent_Department_idx }
+
 // ---- helpers ----
 
 func ent_Account_slice_cast(s []ent.Ent) []*Account {
@@ -555,4 +702,12 @@ func ent_decode_Msi00(c ent.Decoder) (r map[string]int) {
 		}
 	}
 	return
+}
+
+func ent_Department_slice_cast(s []ent.Ent) []*Department {
+	v := make([]*Department, len(s))
+	for i := 0; i < len(s); i++ {
+		v[i] = s[i].(*Department)
+	}
+	return v
 }

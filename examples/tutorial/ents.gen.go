@@ -15,29 +15,29 @@ func LoadAccountById(storage ent.Storage, id uint64) (*Account, error) {
 }
 
 // LoadAccountByEmail loads Account with email
-func LoadAccountByEmail(s ent.Storage, email string) (*Account, error) {
+func LoadAccountByEmail(s ent.Storage, email string, fl ...ent.LookupFlags) (*Account, error) {
 	e := &Account{}
-	err := ent.LoadEntByIndexKey(s, e, &ent_Account_idx[0], []byte(email))
+	err := ent.LoadEntByIndexKey(s, e, &ent_Account_idx[0], []byte(email), fl)
 	return e, err
 }
 
 // FindAccountByEmail looks up Account id with email
-func FindAccountByEmail(s ent.Storage, email string) (uint64, error) {
-	return ent.FindEntIdByIndexKey(s, "account", &ent_Account_idx[0], []byte(email))
+func FindAccountByEmail(s ent.Storage, email string, fl ...ent.LookupFlags) (uint64, error) {
+	return ent.FindIdByIndexKey(s, "account", &ent_Account_idx[0], []byte(email), fl)
 }
 
 // LoadAccountByKind loads all Account ents with kind
-func LoadAccountByKind(s ent.Storage, kind AccountKind, limit int) ([]*Account, error) {
+func LoadAccountByKind(s ent.Storage, kind AccountKind, limit int, fl ...ent.LookupFlags) ([]*Account, error) {
 	e := &Account{}
-	r, err := ent.LoadEntsByIndex(s, e, &ent_Account_idx[1], 1, limit, func(c ent.Encoder) {
+	r, err := ent.LoadEntsByIndex(s, e, &ent_Account_idx[1], limit, fl, 1, func(c ent.Encoder) {
 		c.Int(int64(kind), 32)
 	})
 	return ent_Account_slice_cast(r), err
 }
 
 // FindAccountByKind looks up Account ids with kind
-func FindAccountByKind(s ent.Storage, kind AccountKind, limit int) ([]uint64, error) {
-	return ent.FindEntIdsByIndex(s, "account", &ent_Account_idx[1], 1, limit, func(c ent.Encoder) {
+func FindAccountByKind(s ent.Storage, kind AccountKind, limit int, fl ...ent.LookupFlags) ([]uint64, error) {
+	return ent.FindIdsByIndex(s, "account", &ent_Account_idx[1], limit, fl, 1, func(c ent.Encoder) {
 		c.Int(int64(kind), 32)
 	})
 }
@@ -55,7 +55,7 @@ func (e *Account) MarshalJSON() ([]byte, error) { return ent.JsonEncode(e, "") }
 func (e *Account) UnmarshalJSON(b []byte) error { return ent.JsonDecode(e, b) }
 
 // String returns a JSON representation of e.
-func (e *Account) String() string { return ent.EntString(e) }
+func (e Account) String() string { return ent.EntString(&e) }
 
 // Create a new account ent in storage
 func (e *Account) Create(storage ent.Storage) error { return ent.CreateEnt(e, storage) }
@@ -68,6 +68,9 @@ func (e *Account) Reload() error { return ent.ReloadEnt(e) }
 
 // PermanentlyDelete deletes this ent from storage. This can usually not be undone.
 func (e *Account) PermanentlyDelete() error { return ent.DeleteEnt(e) }
+
+// Iterator returns an iterator over all Account ents. Order is undefined.
+func (e Account) Iterator(s ent.Storage) ent.EntIterator { return s.IterateEnts(&e) }
 
 // ---- field accessor methods ----
 

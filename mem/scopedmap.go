@@ -54,33 +54,3 @@ func (s *ScopedMap) ApplyToOuter() {
 	}
 	s.m = nil
 }
-
-// TODO: move into a test
-// func init() {
-//  var m1 ScopedMap
-//  m1.Put("a", []byte{'a'})
-//  m1.Put("b", []byte{'b'})
-//  m2 := m1.NewScope()
-//  m2.Put("c", []byte{'c'})
-//  m2.Del("b")
-
-//  a := m2.Get("a")
-//  b := m2.Get("b")
-//  c := m2.Get("c")
-//  fmt.Printf("ScopedMap mini test:--------\n")
-//  fmt.Printf("m2: a, b, c = %#v, %#v, %#v\n", a, b, c)
-
-//  a = m1.Get("a")
-//  b = m1.Get("b")
-//  c = m1.Get("c")
-//  fmt.Printf("m1: a, b, c = %#v, %#v, %#v\n", a, b, c)
-
-//  fmt.Printf("m2.ApplyToOuter()\n")
-//  m2.ApplyToOuter()
-
-//  a = m1.Get("a")
-//  b = m1.Get("b")
-//  c = m1.Get("c")
-//  fmt.Printf("m1: a, b, c = %#v, %#v, %#v\n", a, b, c)
-//  fmt.Printf("m1.m: %#v\n", m1.m)
-// }

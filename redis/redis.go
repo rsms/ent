@@ -85,15 +85,16 @@ func (r *Redis) SetConnections(rwc, roc *radix.Pool) error {
 func (r *Redis) initErrLogging(c *radix.Pool) {
 	c.ErrCh = make(chan error)
 	go func(ch chan error, l *log.Logger) {
+		l.Debug("opened connection %p", c)
 		for {
 			// Note: ErrCh closes when c.Close() is called
 			err, ok := <-c.ErrCh
 			if !ok {
 				break
 			}
-			l.Warn("recovered error %v (%v)", err, c)
+			l.Warn("%v (conn %p)", err, c)
 		}
-		l.Debug("closed connection (%v)", c)
+		l.Debug("closed connection %p", c)
 	}(c.ErrCh, r.Logger)
 }
 
@@ -222,6 +223,13 @@ type RawCmd struct { // conforms to radix.Marshaler
 
 func (c *RawCmd) Keys() []string { return []string{} }
 
+func (c *RawCmd) Command() []byte {
+	if i, n := respFindCommand(c.Data); i > 0 {
+		return c.Data[i : i+n]
+	}
+	return nil
+}
+
 func (c *RawCmd) Run(conn radix.Conn) error {
 	if err := conn.Encode(c); err != nil {
 		return err
@@ -242,8 +250,23 @@ func (c *RawCmd) UnmarshalRESP(r *bufio.Reader) error {
 }
 
 func (c *RawCmd) String() string {
-	// return fmt.Sprintf("RawCmd{%q}", c.Data)
-	return fmt.Sprintf("RawCmd%q", splitRESPChunks(c.Data))
+	i, n := respFindCommand(c.Data)
+	var cmdname []byte
+	if i > 0 {
+		cmdname = c.Data[i : i+n]
+	} else {
+		i = 0
+		n = -2
+	}
+	args := fmt.Sprintf("%q", splitRESPChunks(c.Data[i+n+2:]))
+	args = args[1 : len(args)-1] // "[...]" -> "..."
+	if cmdname != nil {
+		if len(args) > 0 {
+			return fmt.Sprintf("RawCmd(%q %s)", cmdname, args)
+		}
+		return fmt.Sprintf("RawCmd(%q)", cmdname)
+	}
+	return fmt.Sprintf("RawCmd(%s)", args)
 }
 
 type RawCmdHexUint struct {
@@ -270,7 +293,7 @@ type ZRangeEntIdsCmd struct {
 	prefixLen int
 }
 
-func makeZRangeEntIdsCmd(key, lookupKey []byte, limit int) *ZRangeEntIdsCmd {
+func makeZRangeEntIdsCmd(key, lookupKey []byte, limit int, rev bool) *ZRangeEntIdsCmd {
 	buf := make([]byte, len(lookupKey)*2+4)
 
 	rangeStart := buf[:len(lookupKey)+2]
@@ -281,7 +304,13 @@ func makeZRangeEntIdsCmd(key, lookupKey []byte, limit int) *ZRangeEntIdsCmd {
 	rangeEnd[0] = '('
 	rangeEnd[1+copy(rangeEnd[1:], lookupKey)] = '\xff'
 
+	cmd := "ZRANGEBYLEX"
 	argsa := [6][]byte{key, rangeStart, rangeEnd}
+	if rev {
+		cmd = "ZREVRANGEBYLEX"
+		argsa[1] = rangeEnd
+		argsa[2] = rangeStart
+	}
 	args := argsa[:3]
 	if limit > 0 {
 		// add "LIMIT 0 limit"
@@ -292,7 +321,7 @@ func makeZRangeEntIdsCmd(key, lookupKey []byte, limit int) *ZRangeEntIdsCmd {
 		args = argsa[:]
 	}
 
-	respData := respMakeStringArray("ZRANGEBYLEX", args...)
+	respData := respMakeStringArray(cmd, args...)
 	return &ZRangeEntIdsCmd{RawCmd: RawCmd{respData}, prefixLen: len(rangeStart)}
 }
 
@@ -320,11 +349,11 @@ func (c *ZRangeEntIdsCmd) UnmarshalRESP(r *bufio.Reader) error {
 	return reader.Err()
 }
 
-func makeSingleKeyCmd(cmd string, key []byte) *RawCmd {
+func MakeSingleKeyCmd(cmd string, key []byte) *RawCmd {
 	return &RawCmd{respMakeStringArray2(cmd, key)}
 }
 
-func makeBulkStringCmd(cmd string, args ...[]byte) *RawCmd {
+func MakeBulkStringCmd(cmd string, args ...[]byte) *RawCmd {
 	return &RawCmd{respMakeStringArray(cmd, args...)}
 }
 
@@ -335,32 +364,19 @@ func makeZADDIdCmd(indexKey, valueKey []byte, id uint64) *RawCmd {
 	copy(rangeKey, valueKey)
 	rangeKey[len(valueKey)] = '\xfe'
 	writeUint64BE(rangeKey[len(valueKey)+1:], id)
-
-	buf := respMakeStringArray("ZADD", indexKey, []byte{'0'}, rangeKey)
-	return &RawCmd{buf}
+	return &RawCmd{respMakeStringArray("ZADD", indexKey, []byte{'0'}, rangeKey)}
 }
 
 func makeZREMIdCmd(indexKey, valueKey []byte, id uint64) *RawCmd {
-	var scratch [16]byte
-	idstr := fmtint(scratch[:], id, 16)
-	return &RawCmd{[]byte(fmt.Sprintf(
-		"*4\r\n"+
-			"$4\r\nZREM\r\n"+
-			"$%d\r\n%s\r\n"+
-			"$1\r\n0\r\n"+
-			"$%d\r\n%s\xfe%s\r\n",
-		len(indexKey), indexKey,
-		len(valueKey)+1+len(idstr), valueKey, idstr))}
+	rangeKey := make([]byte, len(valueKey)+9)
+	copy(rangeKey, valueKey)
+	rangeKey[len(valueKey)] = '\xfe'
+	writeUint64BE(rangeKey[len(valueKey)+1:], id)
+	return &RawCmd{respMakeStringArray("ZREM", indexKey, []byte{'0'}, rangeKey)}
 }
 
 func makeSETNXIdCmd(key []byte, id uint64) *RawCmd {
 	var scratch [16]byte
 	idstr := fmtint(scratch[:], id, 16)
-	return &RawCmd{[]byte(fmt.Sprintf(
-		"*3\r\n"+
-			"$5\r\nSETNX\r\n"+
-			"$%d\r\n%s\r\n"+
-			"$%d\r\n%s\r\n",
-		len(key), key,
-		len(idstr), idstr))}
+	return &RawCmd{respMakeStringArray("SETNX", key, idstr)}
 }

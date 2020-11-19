@@ -140,15 +140,19 @@ func EntString(e Ent) string {
 	return string(b)
 }
 
-// SetEntBaseFieldsAfterLoad sets values of EntBase fields.
+// SetEntBaseFields sets values of EntBase fields.
 // This function is meant to be used by Storage implementation, called after a new ent has been
 // loaded or created.
-func SetEntBaseFieldsAfterLoad(e Ent, s Storage, id, version uint64) {
+func SetEntBaseFields(e Ent, s Storage, id, version, fieldmap uint64) {
 	eb := entBase(e)
 	eb.id = id
 	eb.version = version
 	eb.storage = s
-	eb.fieldmap = 0
+	eb.fieldmap = fieldmap
+}
+
+func SetEntBaseFieldsAfterLoad(e Ent, s Storage, id, version uint64) {
+	SetEntBaseFields(e, s, id, version, 0)
 }
 
 // —————————————————————————————————————————————————————————
@@ -163,7 +167,7 @@ func CreateEnt(e Ent, storage Storage) error {
 		return ErrNoStorage
 	}
 	eb := entBase(e)
-	id, err := storage.CreateEnt(e, e.EntFields().Fieldmap)
+	id, err := storage.Create(e, e.EntFields().Fieldmap)
 	if err == nil {
 		eb.id = id
 		eb.version = 1
@@ -180,7 +184,7 @@ func LoadEntById(e Ent, storage Storage, id uint64) error {
 	if id == 0 {
 		return ErrNotFound
 	}
-	version, err := storage.LoadEntById(e, id)
+	version, err := storage.LoadById(e, id)
 	if err == nil {
 		SetEntBaseFieldsAfterLoad(e, storage, id, version)
 	}
@@ -200,7 +204,7 @@ func SaveEnt(e Ent) error {
 	if eb.fieldmap == 0 {
 		return ErrNotChanged
 	}
-	version, err := eb.storage.SaveEnt(e, eb.fieldmap)
+	version, err := eb.storage.Save(e, eb.fieldmap)
 	if err == nil {
 		eb.version = version
 		eb.fieldmap = 0
@@ -213,7 +217,7 @@ func DeleteEnt(e Ent) error {
 	if eb.storage == nil {
 		return ErrNoStorage
 	}
-	err := eb.storage.DeleteEnt(e)
+	err := eb.storage.Delete(e, e.Id())
 	if err == nil {
 		eb.id = 0
 		eb.version = 0
@@ -221,4 +225,16 @@ func DeleteEnt(e Ent) error {
 		eb.fieldmap = 0
 	}
 	return err
+}
+
+// DeleteAllEntsOfType permanently DELETES ALL ents of the type of prototype
+func DeleteAllEntsOfType(s Storage, prototype Ent) error {
+	it := s.IterateIds(prototype.EntTypeName())
+	var id uint64
+	e := prototype.EntNew()
+	for it.Next(&id) {
+		// SetEntBaseFields(e, s, id, 1, e.EntFields().Fieldmap)
+		s.Delete(e, id)
+	}
+	return it.Err()
 }

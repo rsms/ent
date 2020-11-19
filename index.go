@@ -64,7 +64,7 @@ type StorageIndexEdit struct {
 //
 func ComputeIndexEdits(
 	indexGet IndexGetter,
-	nextEnt, prevEnt Ent,
+	prevEnt, nextEnt Ent,
 	id, changedFields uint64,
 ) ([]StorageIndexEdit, error) {
 	// Example:
@@ -130,8 +130,6 @@ func ComputeIndexEdits(
 		}
 		// fmt.Printf("[ComputeIndexEdits] index %s is affected\n", x.Name)
 
-		isUnique := (x.Flags & EntIndexUnique) != 0
-
 		// build index entry keys
 		var prevValueKey, nextValueKey string
 		if prevEnt != nil {
@@ -140,6 +138,7 @@ func ComputeIndexEdits(
 				return nil, err
 			}
 			prevValueKey = string(data)
+			// fmt.Printf("[ComputeIndexEdits] prevValueKey %q\n", prevValueKey)
 		}
 		if nextEnt != nil {
 			data, err := indexKeyEncoder.EncodeKey(nextEnt, x.Fields)
@@ -147,17 +146,17 @@ func ComputeIndexEdits(
 				return nil, err
 			}
 			nextValueKey = string(data)
+			// fmt.Printf("[ComputeIndexEdits] nextValueKey %q\n", nextValueKey)
 		}
 
-		// fmt.Printf("[ComputeIndexEdits] prevValueKey %q\n", prevValueKey)
-		// fmt.Printf("[ComputeIndexEdits] nextValueKey %q\n", nextValueKey)
+		isUnique := x.IsUnique()
 
 		// remove old entry
 		if prevValueKey != "" {
 			// identical keys? skip index changes.
 			// This happens if the same value is written to the field, which isn't uncommon.
 			if prevValueKey == nextValueKey {
-				// fmt.Printf("index keys are identical; skip. (%q, %q)\n", prevValueKey, nextValueKey)
+				// fmt.Printf("[ComputeIndexEdits] identical; index keys skip\n")
 				continue
 			}
 			var ids IdSet
@@ -181,6 +180,7 @@ func ComputeIndexEdits(
 					Value:     ids,
 					IsCleanup: true,
 				})
+				// fmt.Printf("[ComputeIndexEdits] index %q entry: %#v\n", x.Name, edits[len(edits)-1])
 			}
 		}
 
@@ -211,12 +211,32 @@ func ComputeIndexEdits(
 	return edits, nil
 }
 
+func mergeLookupFlags(v []LookupFlags) (flags LookupFlags) {
+	for _, fl := range v {
+		flags |= fl
+	}
+	return
+}
+
 // ———————————————————————————————————————————————————————————————————————————————————
 // Helper functions which job is to reduce amount of boiler-plate code for
 // generated ent index lookup functions.
 
-func FindEntIdsByIndex(
-	s Storage, entTypeName string, x *EntIndex, nfields, limit int, keyEncoder func(Encoder),
+func FindIdsByIndexKey(
+	s Storage, entTypeName string, x *EntIndex, key []byte, limit int, flags []LookupFlags,
+) ([]uint64, error) {
+	return s.FindByIndex(entTypeName, x, key, limit, mergeLookupFlags(flags))
+}
+
+func LoadEntsByIndexKey(
+	s Storage, e Ent, x *EntIndex, key []byte, limit int, flags []LookupFlags,
+) ([]Ent, error) {
+	return s.LoadByIndex(e, x, key, limit, mergeLookupFlags(flags))
+}
+
+func FindIdsByIndex(
+	s Storage, entTypeName string, x *EntIndex, limit int, flags []LookupFlags,
+	nfields int, keyEncoder func(Encoder),
 ) ([]uint64, error) {
 	var c IndexKeyEncoder
 	c.Reset(nfields)
@@ -225,13 +245,14 @@ func FindEntIdsByIndex(
 		return nil, c.err
 	}
 	c.EndEnt()
-	return s.FindEntIdsByIndex(entTypeName, x, c.b.Bytes(), limit)
+	return FindIdsByIndexKey(s, entTypeName, x, c.b.Bytes(), limit, flags)
 }
 
-func FindEntIdByIndex(
-	s Storage, entTypeName string, x *EntIndex, nfields int, keyEncoder func(Encoder),
+func FindIdByIndex(
+	s Storage, entTypeName string, x *EntIndex, flags []LookupFlags,
+	nfields int, keyEncoder func(Encoder),
 ) (uint64, error) {
-	v, err := FindEntIdsByIndex(s, entTypeName, x, nfields, 1, keyEncoder)
+	v, err := FindIdsByIndex(s, entTypeName, x, 1, flags, nfields, keyEncoder)
 	if err == nil {
 		if len(v) > 0 {
 			return v[0], nil
@@ -241,8 +262,10 @@ func FindEntIdByIndex(
 	return 0, err
 }
 
-func FindEntIdByIndexKey(s Storage, entTypeName string, x *EntIndex, key []byte) (uint64, error) {
-	v, err := s.FindEntIdsByIndex(entTypeName, x, key, 1)
+func FindIdByIndexKey(
+	s Storage, entTypeName string, x *EntIndex, key []byte, flags []LookupFlags,
+) (uint64, error) {
+	v, err := FindIdsByIndexKey(s, entTypeName, x, key, 1, flags)
 	if err == nil {
 		if len(v) > 0 {
 			return v[0], nil
@@ -253,7 +276,8 @@ func FindEntIdByIndexKey(s Storage, entTypeName string, x *EntIndex, key []byte)
 }
 
 func LoadEntsByIndex(
-	s Storage, e Ent, x *EntIndex, nfields, limit int, keyEncoder func(Encoder),
+	s Storage, e Ent, x *EntIndex, limit int, flags []LookupFlags,
+	nfields int, keyEncoder func(Encoder),
 ) ([]Ent, error) {
 	var c IndexKeyEncoder
 	c.Reset(nfields)
@@ -262,30 +286,33 @@ func LoadEntsByIndex(
 		return nil, c.err
 	}
 	c.EndEnt()
-	return s.LoadEntsByIndex(e, x, c.b.Bytes(), limit)
+	return LoadEntsByIndexKey(s, e, x, c.b.Bytes(), limit, flags)
 }
 
-func LoadEntByIndex(s Storage, e Ent, x *EntIndex, nfields int, keyEncoder func(Encoder)) error {
-	v, err := LoadEntsByIndex(s, e, x, nfields, 1, keyEncoder)
+func LoadEntByIndex(
+	s Storage, e Ent, x *EntIndex, flags []LookupFlags,
+	nfields int, keyEncoder func(Encoder),
+) error {
+	v, err := LoadEntsByIndex(s, e, x, 1, flags, nfields, keyEncoder)
 	if err == nil {
 		if len(v) == 0 {
 			err = ErrNotFound
 		} else if v[0] != e {
 			// sanity check, in case a storage implementation does not use e for its first result
-			err = fmt.Errorf("internal storage error: LoadEntsByIndex did not update e")
+			err = fmt.Errorf("internal storage error: LoadByIndex did not update e")
 		}
 	}
 	return err
 }
 
-func LoadEntByIndexKey(s Storage, e Ent, x *EntIndex, key []byte) error {
-	v, err := s.LoadEntsByIndex(e, x, key, 1)
+func LoadEntByIndexKey(s Storage, e Ent, x *EntIndex, key []byte, flags []LookupFlags) error {
+	v, err := LoadEntsByIndexKey(s, e, x, key, 1, flags)
 	if err == nil {
 		if len(v) == 0 {
 			err = ErrNotFound
 		} else if v[0] != e {
 			// sanity check, in case a storage implementation does not use e for its first result
-			err = fmt.Errorf("internal storage error: LoadEntsByIndex did not update e")
+			err = fmt.Errorf("internal storage error: LoadByIndex did not update e")
 		}
 	}
 	return err
@@ -445,7 +472,6 @@ func (c *IndexKeyEncoder) Uint(v uint64, bitsize int) {
 			i := c.b.Grow(8)
 			writeUint64BE(c.b[i:i+8], v)
 		}
-		// fmt.Printf("c.b.Bytes(): %#v\n", c.b.Bytes())
 	} else {
 		c.values = append(c.values, strconv.FormatUint(v, 36))
 	}

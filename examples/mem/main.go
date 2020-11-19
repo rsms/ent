@@ -39,6 +39,22 @@ type Account struct {
 	things        map[string]int
 }
 
+type Building int32
+
+const (
+	BuildingF1 = iota
+	BuildingF2
+	BuildingF3
+	BuildingGymnasium = 100
+	BuildingObservatory
+)
+
+type Department struct {
+	ent.EntBase `dept`
+	name        string
+	building    Building `ent:",index"`
+}
+
 func (e *Account) SetSize(w, h int) {
 	e.setWidth(w)
 	e.SetHeight(h)
@@ -55,10 +71,6 @@ func (e *Account) SetWidth(w int) {
 func (e *Account) MarshalJSON() ([]byte, error) {
 	return ent.JsonEncode(e, "  ")
 }
-
-// type Location struct {
-// 	ent.EntBase `loc`
-// }
 
 func main() {
 	estore := mem.NewEntStorage()
@@ -115,28 +127,63 @@ func main() {
 
 	ids3, _ := FindAccountByEmail(estore, "bob@bob.com")
 	ids4, _ := FindAccountByEmail(estore, "bobby@bob.com")
-	fmt.Printf("indexLookup email bob@bob.com   => %v\n", ids3)
-	fmt.Printf("indexLookup email bobby@bob.com => %v\n", ids4)
+	fmt.Printf("FindAccountByEmail bob@bob.com   => %v\n", ids3)
+	fmt.Printf("FindAccountByEmail bobby@bob.com => %v\n", ids4)
 
 	ids5, _ := FindAccountBySize(estore, 0, 0, -1)
 	ids6, _ := FindAccountBySize(estore, 100, 0, -1)
 	fmt.Printf("FindAccountBySize 0x0   => %v\n", ids5)
 	fmt.Printf("FindAccountBySize 100x0 => %v\n", ids6)
 
-	fmt.Printf("\nall ok\n")
+	// -----
+	// iteration and loading by limit & ent.Reverse
 
-	// a2 := &Account{}
-	// a2.SetName("jane")
-	// a2.SetEmail("jane@gmail.com")
-	// a2.SetFoo([]int{})
-	// a2.SetFoofoo([][]int16{
-	// 	{1, 2, 3},
-	// 	{},
-	// 	{10, 20},
-	// })
-	// if err := a2.Create(estore); err != nil {
-	// 	panic(err)
-	// }
-	// fmt.Printf("created account #%d\n", a2.Id())
+	// create some departments
+	panicOnError((&Department{name: "Astronomy", building: BuildingF2}).Create(estore))
+	panicOnError((&Department{name: "Computer Science", building: BuildingF2}).Create(estore))
+	panicOnError((&Department{name: "Mathematical Sciences", building: BuildingF2}).Create(estore))
+	panicOnError((&Department{name: "Art History", building: BuildingF2}).Create(estore))
+	panicOnError((&Department{name: "Physics", building: BuildingF2}).Create(estore))
+	panicOnError((&Department{name: "Psychology", building: BuildingF2}).Create(estore))
+	panicOnError((&Department{name: "Religious Mythology", building: BuildingF3}).Create(estore))
+	panicOnError((&Department{name: "Bookstore", building: BuildingF3}).Create(estore))
 
+	// list all departments using an iterator. Iteration order is undefined; varies by storage.
+	fmt.Printf("\n-- list all departments --\n")
+	var d Department
+	for it := d.Iterator(estore); it.Next(&d); {
+		fmt.Printf("  %v\n", d.Name())
+	}
+
+	departments, _ := LoadDepartmentByBuilding(estore, BuildingF2, 0)
+	fmt.Printf("\nLoadDepartmentByBuilding(BuildingF2, limit=0, flags=0) =>\n")
+	for _, d := range departments {
+		fmt.Printf("  %v\n", d.Name())
+	}
+
+	departments, _ = LoadDepartmentByBuilding(estore, BuildingF2, 3)
+	fmt.Printf("\nLoadDepartmentByBuilding(BuildingF2, limit=3, flags=0) =>\n")
+	for _, d := range departments {
+		fmt.Printf("  %v\n", d.Name())
+	}
+
+	departments, _ = LoadDepartmentByBuilding(estore, BuildingF2, 3, ent.Reverse)
+	fmt.Printf("\nLoadDepartmentByBuilding(BuildingF2, limit=3, flags=ent.Reverse) =>\n")
+	for _, d := range departments {
+		fmt.Printf("  %v\n", d.Name())
+	}
+
+	// delete all departments
+	fmt.Printf("\n-- delete all departments & then list: (should be empty) --\n")
+	panicOnError(ent.DeleteAllEntsOfType(estore, &Department{}))
+	for it := d.Iterator(estore); it.Next(&d); {
+		fmt.Printf("  #%d %s\n", d.Id(), d.Name())
+	}
+	fmt.Printf("(end list)\n")
+}
+
+func panicOnError(err error) {
+	if err != nil {
+		panic(err)
+	}
 }

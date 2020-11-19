@@ -243,3 +243,25 @@ func respMakeStringArray(cmd string, args ...[]byte) []byte {
 
 	return b
 }
+
+func respFindCommand(b []byte) (start, length int) {
+	if len(b) > 10 && b[0] == '*' {
+		i, z := 1, len(b)
+		var n uint64
+		for ; i < z; i++ {
+			if b[i] == '$' {
+				i++
+				e := i
+				for ; e < z; e++ {
+					if b[e] == '\r' {
+						break
+					}
+				}
+				n, _ = parseUint(b[i:e])
+				e += 2
+				return e, int(n)
+			}
+		}
+	}
+	return
+}

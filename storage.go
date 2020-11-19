@@ -6,12 +6,27 @@ import (
 
 // Storage is the interface for persistent storage of ents
 type Storage interface {
-	CreateEnt(e Ent, fieldmap uint64) (id uint64, err error)
-	SaveEnt(e Ent, fieldmap uint64) (version uint64, err error)
-	LoadEntById(e Ent, id uint64) (version uint64, err error)
-	FindEntIdsByIndex(entTypeName string, x *EntIndex, key []byte, limit int) ([]uint64, error)
-	LoadEntsByIndex(e Ent, x *EntIndex, key []byte, limit int) ([]Ent, error)
-	DeleteEnt(e Ent) error
+	Create(e Ent, fieldmap uint64) (id uint64, err error)
+	Save(e Ent, fieldmap uint64) (version uint64, err error)
+	LoadById(e Ent, id uint64) (version uint64, err error)
+	LoadByIndex(e Ent, x *EntIndex, key []byte, limit int, fl LookupFlags) ([]Ent, error)
+	FindByIndex(entType string, x *EntIndex, key []byte, limit int, fl LookupFlags) ([]uint64, error)
+	IterateIds(entType string) IdIterator
+	IterateEnts(proto Ent) EntIterator
+	Delete(e Ent, id uint64) error
+}
+
+type IdIterator interface {
+	// Next reads the next id. Returns false when the iterator has reached its end.
+	Next(id *uint64) bool
+	Err() error // returns non-nil if an error occured
+}
+
+type EntIterator interface {
+	// Next loads the next ent into e and returns true.
+	// When the iterator has reached its end, this method returns false (does not modify e.)
+	Next(e Ent) bool
+	Err() error // returns non-nil if an error occured
 }
 
 // Encoder is the interface for ent field encoders.
@@ -61,6 +76,14 @@ type Decoder interface {
 	Float(bitsize int) float64 // advisory size
 	Discard()                  // read and discard any value
 }
+
+// LookupFlags describe options for lookup
+type LookupFlags int
+
+const (
+	// Reverse returns results in reverse order. Useful in combination with a limit.
+	Reverse = LookupFlags(1 << iota)
+)
 
 // EntIndexFlag describes properties of an EntIndex
 type EntIndexFlag int
