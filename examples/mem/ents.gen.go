@@ -114,6 +114,9 @@ func FindAccountByUuid(s ent.Storage, uuid_ uuid.UUID, fl ...ent.LookupFlags) (u
 // EntTypeName returns the ent's storage name ("account")
 func (e Account) EntTypeName() string { return "account" }
 
+// EntStorage returns the storage this ent belongs to or nil if it doesn't belong anywhere.
+func (e *Account) EntStorage() ent.Storage { return ent.GetStorage(e) }
+
 // EntNew returns a new empty Account. Used by the ent package for loading ents.
 func (e Account) EntNew() ent.Ent { return &Account{} }
 
@@ -162,33 +165,150 @@ func (e *Account) Rgb() [3]int            { return e.rgb }
 func (e *Account) Threebytes() [3]byte    { return e.threebytes }
 func (e *Account) Things() map[string]int { return e.things }
 
-func (e *Account) SetName(v string)           { e.name = v; ent.SetFieldChanged(&e.EntBase, 0) }
-func (e *Account) setWidth(v int)             { e.width = v; ent.SetFieldChanged(&e.EntBase, 1) }
-func (e *Account) SetHeight(v int)            { e.height = v; ent.SetFieldChanged(&e.EntBase, 2) }
-func (e *Account) SetUuid(v uuid.UUID)        { e.uuid = v; ent.SetFieldChanged(&e.EntBase, 3) }
-func (e *Account) SetFlag(v uint16)           { e.flag = v; ent.SetFieldChanged(&e.EntBase, 4) }
-func (e *Account) SetScore(v float32)         { e.score = v; ent.SetFieldChanged(&e.EntBase, 5) }
-func (e *Account) SetPicture(v []byte)        { e.picture = v; ent.SetFieldChanged(&e.EntBase, 6) }
-func (e *Account) SetEmail(v string)          { e.email = v; ent.SetFieldChanged(&e.EntBase, 7) }
-func (e *Account) SetEmailVerified(v bool)    { e.emailVerified = v; ent.SetFieldChanged(&e.EntBase, 8) }
-func (e *Account) SetDeleted(v bool)          { e.Deleted = v; ent.SetFieldChanged(&e.EntBase, 9) }
-func (e *Account) SetPasswordHash(v string)   { e.passwordHash = v; ent.SetFieldChanged(&e.EntBase, 10) }
-func (e *Account) SetThing(v Thing3)          { e.thing = v; ent.SetFieldChanged(&e.EntBase, 11) }
-func (e *Account) SetFoo(v []int)             { e.foo = v; ent.SetFieldChanged(&e.EntBase, 12) }
-func (e *Account) SetFoofoo(v [][]int16)      { e.foofoo = v; ent.SetFieldChanged(&e.EntBase, 13) }
-func (e *Account) SetData(v Data)             { e.data = v; ent.SetFieldChanged(&e.EntBase, 14) }
-func (e *Account) SetRgb(v [3]int)            { e.rgb = v; ent.SetFieldChanged(&e.EntBase, 15) }
-func (e *Account) SetThreebytes(v [3]byte)    { e.threebytes = v; ent.SetFieldChanged(&e.EntBase, 16) }
-func (e *Account) SetThings(v map[string]int) { e.things = v; ent.SetFieldChanged(&e.EntBase, 17) }
+func (e *Account) SetName(v string)           { e.name = v; e.EntBase.SetEntFieldChanged(0) }
+func (e *Account) setWidth(v int)             { e.width = v; e.EntBase.SetEntFieldChanged(1) }
+func (e *Account) SetHeight(v int)            { e.height = v; e.EntBase.SetEntFieldChanged(2) }
+func (e *Account) SetUuid(v uuid.UUID)        { e.uuid = v; e.EntBase.SetEntFieldChanged(3) }
+func (e *Account) SetFlag(v uint16)           { e.flag = v; e.EntBase.SetEntFieldChanged(4) }
+func (e *Account) SetScore(v float32)         { e.score = v; e.EntBase.SetEntFieldChanged(5) }
+func (e *Account) SetPicture(v []byte)        { e.picture = v; e.EntBase.SetEntFieldChanged(6) }
+func (e *Account) SetEmail(v string)          { e.email = v; e.EntBase.SetEntFieldChanged(7) }
+func (e *Account) SetEmailVerified(v bool)    { e.emailVerified = v; e.EntBase.SetEntFieldChanged(8) }
+func (e *Account) SetDeleted(v bool)          { e.Deleted = v; e.EntBase.SetEntFieldChanged(9) }
+func (e *Account) SetPasswordHash(v string)   { e.passwordHash = v; e.EntBase.SetEntFieldChanged(10) }
+func (e *Account) SetThing(v Thing3)          { e.thing = v; e.EntBase.SetEntFieldChanged(11) }
+func (e *Account) SetFoo(v []int)             { e.foo = v; e.EntBase.SetEntFieldChanged(12) }
+func (e *Account) SetFoofoo(v [][]int16)      { e.foofoo = v; e.EntBase.SetEntFieldChanged(13) }
+func (e *Account) SetData(v Data)             { e.data = v; e.EntBase.SetEntFieldChanged(14) }
+func (e *Account) SetRgb(v [3]int)            { e.rgb = v; e.EntBase.SetEntFieldChanged(15) }
+func (e *Account) SetThreebytes(v [3]byte)    { e.threebytes = v; e.EntBase.SetEntFieldChanged(16) }
+func (e *Account) SetThings(v map[string]int) { e.things = v; e.EntBase.SetEntFieldChanged(17) }
 
-func (e *Account) SetUuidChanged()       { ent.SetFieldChanged(&e.EntBase, 3) }
-func (e *Account) SetPictureChanged()    { ent.SetFieldChanged(&e.EntBase, 6) }
-func (e *Account) SetFooChanged()        { ent.SetFieldChanged(&e.EntBase, 12) }
-func (e *Account) SetFoofooChanged()     { ent.SetFieldChanged(&e.EntBase, 13) }
-func (e *Account) SetDataChanged()       { ent.SetFieldChanged(&e.EntBase, 14) }
-func (e *Account) SetRgbChanged()        { ent.SetFieldChanged(&e.EntBase, 15) }
-func (e *Account) SetThreebytesChanged() { ent.SetFieldChanged(&e.EntBase, 16) }
-func (e *Account) SetThingsChanged()     { ent.SetFieldChanged(&e.EntBase, 17) }
+// SetNameIfDifferent sets name only if v is different from the current value.
+func (e *Account) SetNameIfDifferent(v string) bool {
+	if e.name == v {
+		return false
+	}
+	e.SetName(v)
+	return true
+}
+
+// SetWidthIfDifferent sets width only if v is different from the current value.
+func (e *Account) SetWidthIfDifferent(v int) bool {
+	if e.width == v {
+		return false
+	}
+	e.setWidth(v)
+	return true
+}
+
+// SetHeightIfDifferent sets height only if v is different from the current value.
+func (e *Account) SetHeightIfDifferent(v int) bool {
+	if e.height == v {
+		return false
+	}
+	e.SetHeight(v)
+	return true
+}
+
+// SetUuidIfDifferent sets uuid only if v is different from the current value.
+func (e *Account) SetUuidIfDifferent(v uuid.UUID) bool {
+	if e.uuid == v {
+		return false
+	}
+	e.SetUuid(v)
+	return true
+}
+
+// SetFlagIfDifferent sets flag only if v is different from the current value.
+func (e *Account) SetFlagIfDifferent(v uint16) bool {
+	if e.flag == v {
+		return false
+	}
+	e.SetFlag(v)
+	return true
+}
+
+// SetScoreIfDifferent sets score only if v is different from the current value.
+func (e *Account) SetScoreIfDifferent(v float32) bool {
+	if e.score == v {
+		return false
+	}
+	e.SetScore(v)
+	return true
+}
+
+// SetEmailIfDifferent sets email only if v is different from the current value.
+func (e *Account) SetEmailIfDifferent(v string) bool {
+	if e.email == v {
+		return false
+	}
+	e.SetEmail(v)
+	return true
+}
+
+// SetEmailVerifiedIfDifferent sets emailVerified only if v is different from the current value.
+func (e *Account) SetEmailVerifiedIfDifferent(v bool) bool {
+	if e.emailVerified == v {
+		return false
+	}
+	e.SetEmailVerified(v)
+	return true
+}
+
+// SetDeletedIfDifferent sets Deleted only if v is different from the current value.
+func (e *Account) SetDeletedIfDifferent(v bool) bool {
+	if e.Deleted == v {
+		return false
+	}
+	e.SetDeleted(v)
+	return true
+}
+
+// SetPasswordHashIfDifferent sets passwordHash only if v is different from the current value.
+func (e *Account) SetPasswordHashIfDifferent(v string) bool {
+	if e.passwordHash == v {
+		return false
+	}
+	e.SetPasswordHash(v)
+	return true
+}
+
+// SetThingIfDifferent sets thing only if v is different from the current value.
+func (e *Account) SetThingIfDifferent(v Thing3) bool {
+	if e.thing == v {
+		return false
+	}
+	e.SetThing(v)
+	return true
+}
+
+// SetRgbIfDifferent sets rgb only if v is different from the current value.
+func (e *Account) SetRgbIfDifferent(v [3]int) bool {
+	if e.rgb == v {
+		return false
+	}
+	e.SetRgb(v)
+	return true
+}
+
+// SetThreebytesIfDifferent sets threebytes only if v is different from the current value.
+func (e *Account) SetThreebytesIfDifferent(v [3]byte) bool {
+	if e.threebytes == v {
+		return false
+	}
+	e.SetThreebytes(v)
+	return true
+}
+
+func (e *Account) SetUuidChanged()       { e.EntBase.SetEntFieldChanged(3) }
+func (e *Account) SetPictureChanged()    { e.EntBase.SetEntFieldChanged(6) }
+func (e *Account) SetFooChanged()        { e.EntBase.SetEntFieldChanged(12) }
+func (e *Account) SetFoofooChanged()     { e.EntBase.SetEntFieldChanged(13) }
+func (e *Account) SetDataChanged()       { e.EntBase.SetEntFieldChanged(14) }
+func (e *Account) SetRgbChanged()        { e.EntBase.SetEntFieldChanged(15) }
+func (e *Account) SetThreebytesChanged() { e.EntBase.SetEntFieldChanged(16) }
+func (e *Account) SetThingsChanged()     { e.EntBase.SetEntFieldChanged(17) }
 
 // ---- encode & decode methods ----
 
@@ -468,6 +588,9 @@ func FindDepartmentByBuilding(s ent.Storage, building Building, limit int, fl ..
 // EntTypeName returns the ent's storage name ("dept")
 func (e Department) EntTypeName() string { return "dept" }
 
+// EntStorage returns the storage this ent belongs to or nil if it doesn't belong anywhere.
+func (e *Department) EntStorage() ent.Storage { return ent.GetStorage(e) }
+
 // EntNew returns a new empty Department. Used by the ent package for loading ents.
 func (e Department) EntNew() ent.Ent { return &Department{} }
 
@@ -500,8 +623,26 @@ func (e Department) Iterator(s ent.Storage) ent.EntIterator { return s.IterateEn
 func (e *Department) Name() string       { return e.name }
 func (e *Department) Building() Building { return e.building }
 
-func (e *Department) SetName(v string)       { e.name = v; ent.SetFieldChanged(&e.EntBase, 0) }
-func (e *Department) SetBuilding(v Building) { e.building = v; ent.SetFieldChanged(&e.EntBase, 1) }
+func (e *Department) SetName(v string)       { e.name = v; e.EntBase.SetEntFieldChanged(0) }
+func (e *Department) SetBuilding(v Building) { e.building = v; e.EntBase.SetEntFieldChanged(1) }
+
+// SetNameIfDifferent sets name only if v is different from the current value.
+func (e *Department) SetNameIfDifferent(v string) bool {
+	if e.name == v {
+		return false
+	}
+	e.SetName(v)
+	return true
+}
+
+// SetBuildingIfDifferent sets building only if v is different from the current value.
+func (e *Department) SetBuildingIfDifferent(v Building) bool {
+	if e.building == v {
+		return false
+	}
+	e.SetBuilding(v)
+	return true
+}
 
 // ---- encode & decode methods ----
 

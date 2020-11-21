@@ -41,6 +41,9 @@ func FindAccountByName(s ent.Storage, name string, limit int, fl ...ent.LookupFl
 // EntTypeName returns the ent's storage name ("account")
 func (e Account) EntTypeName() string { return "account" }
 
+// EntStorage returns the storage this ent belongs to or nil if it doesn't belong anywhere.
+func (e *Account) EntStorage() ent.Storage { return ent.GetStorage(e) }
+
 // EntNew returns a new empty Account. Used by the ent package for loading ents.
 func (e Account) EntNew() ent.Ent { return &Account{} }
 
@@ -76,11 +79,56 @@ func (e *Account) EmailVerified() bool  { return e.emailVerified }
 func (e *Account) Deleted() bool        { return e.deleted }
 func (e *Account) PasswordHash() string { return e.passwordHash }
 
-func (e *Account) SetName(v string)         { e.name = v; ent.SetFieldChanged(&e.EntBase, 0) }
-func (e *Account) SetEmail(v string)        { e.email = v; ent.SetFieldChanged(&e.EntBase, 1) }
-func (e *Account) SetEmailVerified(v bool)  { e.emailVerified = v; ent.SetFieldChanged(&e.EntBase, 2) }
-func (e *Account) SetDeleted(v bool)        { e.deleted = v; ent.SetFieldChanged(&e.EntBase, 3) }
-func (e *Account) SetPasswordHash(v string) { e.passwordHash = v; ent.SetFieldChanged(&e.EntBase, 4) }
+func (e *Account) SetName(v string)         { e.name = v; e.EntBase.SetEntFieldChanged(0) }
+func (e *Account) SetEmail(v string)        { e.email = v; e.EntBase.SetEntFieldChanged(1) }
+func (e *Account) SetEmailVerified(v bool)  { e.emailVerified = v; e.EntBase.SetEntFieldChanged(2) }
+func (e *Account) SetDeleted(v bool)        { e.deleted = v; e.EntBase.SetEntFieldChanged(3) }
+func (e *Account) SetPasswordHash(v string) { e.passwordHash = v; e.EntBase.SetEntFieldChanged(4) }
+
+// SetNameIfDifferent sets name only if v is different from the current value.
+func (e *Account) SetNameIfDifferent(v string) bool {
+	if e.name == v {
+		return false
+	}
+	e.SetName(v)
+	return true
+}
+
+// SetEmailIfDifferent sets email only if v is different from the current value.
+func (e *Account) SetEmailIfDifferent(v string) bool {
+	if e.email == v {
+		return false
+	}
+	e.SetEmail(v)
+	return true
+}
+
+// SetEmailVerifiedIfDifferent sets emailVerified only if v is different from the current value.
+func (e *Account) SetEmailVerifiedIfDifferent(v bool) bool {
+	if e.emailVerified == v {
+		return false
+	}
+	e.SetEmailVerified(v)
+	return true
+}
+
+// SetDeletedIfDifferent sets deleted only if v is different from the current value.
+func (e *Account) SetDeletedIfDifferent(v bool) bool {
+	if e.deleted == v {
+		return false
+	}
+	e.SetDeleted(v)
+	return true
+}
+
+// SetPasswordHashIfDifferent sets passwordHash only if v is different from the current value.
+func (e *Account) SetPasswordHashIfDifferent(v string) bool {
+	if e.passwordHash == v {
+		return false
+	}
+	e.SetPasswordHash(v)
+	return true
+}
 
 // ---- encode & decode methods ----
 
@@ -222,6 +270,9 @@ func FindDepartmentByBuilding(s ent.Storage, building Building, limit int, fl ..
 // EntTypeName returns the ent's storage name ("dept")
 func (e Department) EntTypeName() string { return "dept" }
 
+// EntStorage returns the storage this ent belongs to or nil if it doesn't belong anywhere.
+func (e *Department) EntStorage() ent.Storage { return ent.GetStorage(e) }
+
 // EntNew returns a new empty Department. Used by the ent package for loading ents.
 func (e Department) EntNew() ent.Ent { return &Department{} }
 
@@ -254,8 +305,26 @@ func (e Department) Iterator(s ent.Storage) ent.EntIterator { return s.IterateEn
 func (e *Department) Name() string       { return e.name }
 func (e *Department) Building() Building { return e.building }
 
-func (e *Department) SetName(v string)       { e.name = v; ent.SetFieldChanged(&e.EntBase, 0) }
-func (e *Department) SetBuilding(v Building) { e.building = v; ent.SetFieldChanged(&e.EntBase, 1) }
+func (e *Department) SetName(v string)       { e.name = v; e.EntBase.SetEntFieldChanged(0) }
+func (e *Department) SetBuilding(v Building) { e.building = v; e.EntBase.SetEntFieldChanged(1) }
+
+// SetNameIfDifferent sets name only if v is different from the current value.
+func (e *Department) SetNameIfDifferent(v string) bool {
+	if e.name == v {
+		return false
+	}
+	e.SetName(v)
+	return true
+}
+
+// SetBuildingIfDifferent sets building only if v is different from the current value.
+func (e *Department) SetBuildingIfDifferent(v Building) bool {
+	if e.building == v {
+		return false
+	}
+	e.SetBuilding(v)
+	return true
+}
 
 // ---- encode & decode methods ----
 

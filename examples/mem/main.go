@@ -119,12 +119,17 @@ func main() {
 
 	a1.SetEmail("bobby@bob.com") // causes the "email" index to be updated
 	a1.SetWidth(100)             // causes the "size" index to be updated
-	fmt.Printf("ent.IsFieldChanged(ent_Account_width) => %v\n",
-		a1.EntIsFieldChanged(ent_Account_f_width))
+	fmt.Printf("IsEntFieldChanged(ent_Account_width) => %v\n",
+		a1.IsEntFieldChanged(ent_Account_f_width))
 	if err := a1.Save(); err != nil {
 		panic(err)
 	}
 
+	// reflection
+	fmt.Printf("GetFieldValue(ent_Account_f_width) => %v\n",
+		ent.GetFieldValue(a1, ent_Account_f_width))
+
+	// secondary index access
 	ids3, _ := FindAccountByEmail(estore, "bob@bob.com")
 	ids4, _ := FindAccountByEmail(estore, "bobby@bob.com")
 	fmt.Printf("FindAccountByEmail bob@bob.com   => %v\n", ids3)

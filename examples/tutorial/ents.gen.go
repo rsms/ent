@@ -45,6 +45,9 @@ func FindAccountByKind(s ent.Storage, kind AccountKind, limit int, fl ...ent.Loo
 // EntTypeName returns the ent's storage name ("account")
 func (e Account) EntTypeName() string { return "account" }
 
+// EntStorage returns the storage this ent belongs to or nil if it doesn't belong anywhere.
+func (e *Account) EntStorage() ent.Storage { return ent.GetStorage(e) }
+
 // EntNew returns a new empty Account. Used by the ent package for loading ents.
 func (e Account) EntNew() ent.Ent { return &Account{} }
 
@@ -79,10 +82,46 @@ func (e *Account) DisplayName() string { return e.displayName }
 func (e *Account) Email() string       { return e.email }
 func (e *Account) Kind() AccountKind   { return e.kind }
 
-func (e *Account) SetName(v string)        { e.name = v; ent.SetFieldChanged(&e.EntBase, 0) }
-func (e *Account) SetDisplayName(v string) { e.displayName = v; ent.SetFieldChanged(&e.EntBase, 1) }
-func (e *Account) SetEmail(v string)       { e.email = v; ent.SetFieldChanged(&e.EntBase, 2) }
-func (e *Account) SetKind(v AccountKind)   { e.kind = v; ent.SetFieldChanged(&e.EntBase, 3) }
+func (e *Account) SetName(v string)        { e.name = v; e.EntBase.SetEntFieldChanged(0) }
+func (e *Account) SetDisplayName(v string) { e.displayName = v; e.EntBase.SetEntFieldChanged(1) }
+func (e *Account) SetEmail(v string)       { e.email = v; e.EntBase.SetEntFieldChanged(2) }
+func (e *Account) SetKind(v AccountKind)   { e.kind = v; e.EntBase.SetEntFieldChanged(3) }
+
+// SetNameIfDifferent sets name only if v is different from the current value.
+func (e *Account) SetNameIfDifferent(v string) bool {
+	if e.name == v {
+		return false
+	}
+	e.SetName(v)
+	return true
+}
+
+// SetDisplayNameIfDifferent sets displayName only if v is different from the current value.
+func (e *Account) SetDisplayNameIfDifferent(v string) bool {
+	if e.displayName == v {
+		return false
+	}
+	e.SetDisplayName(v)
+	return true
+}
+
+// SetEmailIfDifferent sets email only if v is different from the current value.
+func (e *Account) SetEmailIfDifferent(v string) bool {
+	if e.email == v {
+		return false
+	}
+	e.SetEmail(v)
+	return true
+}
+
+// SetKindIfDifferent sets kind only if v is different from the current value.
+func (e *Account) SetKindIfDifferent(v AccountKind) bool {
+	if e.kind == v {
+		return false
+	}
+	e.SetKind(v)
+	return true
+}
 
 // ---- encode & decode methods ----
 
