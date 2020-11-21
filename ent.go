@@ -155,6 +155,10 @@ func SetEntBaseFieldsAfterLoad(e Ent, s Storage, id, version uint64) {
 	SetEntBaseFields(e, s, id, version, 0)
 }
 
+func GetStorage(e Ent) Storage {
+	return entBase(e).storage
+}
+
 // —————————————————————————————————————————————————————————
 // CRUD
 // C = CreateEnt(Ent,Storage)
