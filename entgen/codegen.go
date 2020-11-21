@@ -815,6 +815,8 @@ func (g *Codegen) codegenEnt(e *EntInfo) error {
 			fieldSetterPrefix = "set"
 		}
 		var genChangedSetters []*EntField
+		var genConditionalSetters []*EntField
+		var genConditionalSettersSetNames []string
 		for _, field := range e.fields {
 			mname := fieldSetterPrefix + field.uname
 
@@ -838,9 +840,14 @@ func (g *Codegen) codegenEnt(e *EntInfo) error {
 					continue
 				}
 			}
+
+			if types.Comparable(field.t.Type) {
+				genConditionalSetters = append(genConditionalSetters, field)
+				genConditionalSettersSetNames = append(genConditionalSettersSetNames, mname)
+			}
 			g.f("func (e *%s) %s(v %s)\t{"+
 				" e.%s = v;"+
-				" ent.SetFieldChanged(&e.EntBase, %d)"+
+				" e.EntBase.SetEntFieldChanged(%d)"+
 				"}\n",
 				e.sname, mname, g.goTypeName(field.t.Type),
 				field.sname,
@@ -852,16 +859,43 @@ func (g *Codegen) codegenEnt(e *EntInfo) error {
 			}
 		}
 
-		// SetFIELDChanged(bool)
+		// SetFIELDIfDifferent()
+		if len(genConditionalSetters) > 0 {
+			wline()
+			for i, field := range genConditionalSetters {
+				mname := fieldSetterPrefix + field.uname + "IfDifferent"
+				if !methodIsUndefined(mname) {
+					continue
+				}
+				generatedMethods[mname] = true
+				setMname := genConditionalSettersSetNames[i]
+				g.f("// %s sets %s only if v is different from the current value.\n"+
+					"func (e *%s) %s(v %s) bool\t{\n"+
+					"  if e.%s == v {\n"+
+					"    return false\n"+
+					"  }\n"+
+					"  e.%s(v)\n"+
+					"  return true\n"+
+					"}\n\n",
+					mname, field.sname,
+					e.sname, mname, g.goTypeName(field.t.Type),
+					field.sname,
+					setMname,
+				)
+			}
+		}
+
+		// SetFIELDChanged(bool) -- only for fields of referential mutable types
 		if len(genChangedSetters) > 0 {
 			wline()
 			for _, field := range genChangedSetters {
 				mname := fieldSetterPrefix + field.uname + "Changed"
-				if methodIsUndefined(mname) {
-					g.f("func (e *%s) %s()\t{ ent.SetFieldChanged(&e.EntBase, %d) }\n",
-						e.sname, mname, field.index)
-					generatedMethods[mname] = true
+				if !methodIsUndefined(mname) {
+					continue
 				}
+				generatedMethods[mname] = true
+				g.f("func (e *%s) %s()\t{ e.EntBase.SetEntFieldChanged(%d) }\n",
+					e.sname, mname, field.index)
 			}
 		}
 
