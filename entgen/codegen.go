@@ -676,7 +676,7 @@ func (g *Codegen) codegenEnt(e *EntInfo) error {
 	if methodIsUndefined(mname) {
 		generatedMethods[mname] = true
 		g.f("// %s returns the storage this ent belongs to or nil if it doesn't belong anywhere.\n"+
-			"func (e %s) %s() ent.Storage\t{ return ent.GetStorage(e) }\n\n",
+			"func (e *%s) %s() ent.Storage\t{ return ent.GetStorage(e) }\n\n",
 			mname,
 			e.sname, mname)
 	}
