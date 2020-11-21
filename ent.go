@@ -17,6 +17,7 @@ type Ent interface {
 	EntDecodePartial(c Decoder, fields FieldSet) (version uint64)
 	EntIndexes() []EntIndex
 	EntFields() Fields
+	EntPendingFields() FieldSet
 }
 
 // EntBase is the foundation for all ent types.
@@ -96,6 +97,8 @@ func (e *EntBase) EntDecode(c Decoder) (id, version uint64) {
 func (e *EntBase) EntIsFieldChanged(fieldIndex int) bool {
 	return IsFieldChanged(e, fieldIndex)
 }
+
+func (e *EntBase) EntPendingFields() FieldSet { return e.changes }
 
 func (e *EntBase) EntIndexes() []EntIndex { return nil }
 func (e *EntBase) EntFields() Fields      { return Fields{} }
