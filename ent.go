@@ -2,6 +2,7 @@ package ent
 
 import (
 	"errors"
+	"reflect"
 	"unsafe"
 )
 
@@ -17,7 +18,6 @@ type Ent interface {
 	EntDecodePartial(c Decoder, fields FieldSet) (version uint64)
 	EntIndexes() []EntIndex
 	EntFields() Fields
-	EntPendingFields() FieldSet
 }
 
 // EntBase is the foundation for all ent types.
@@ -94,9 +94,9 @@ func (e *EntBase) EntDecode(c Decoder) (id, version uint64) {
 	return
 }
 
-func (e *EntBase) EntIsFieldChanged(fieldIndex int) bool {
-	return IsFieldChanged(e, fieldIndex)
-}
+func (e *EntBase) IsEntFieldChanged(fieldIndex int) bool { return IsFieldChanged(e, fieldIndex) }
+func (e *EntBase) SetEntFieldChanged(fieldIndex int)     { SetFieldChanged(e, fieldIndex) }
+func (e *EntBase) ClearEntFieldChanged(fieldIndex int)   { ClearFieldChanged(e, fieldIndex) }
 
 func (e *EntBase) EntPendingFields() FieldSet { return e.changes }
 
@@ -160,6 +160,10 @@ func SetEntBaseFieldsAfterLoad(e Ent, s Storage, id, version uint64) {
 
 func GetStorage(e Ent) Storage {
 	return entBase(e).storage
+}
+
+func GetFieldValue(e Ent, fieldIndex int) reflect.Value {
+	return reflect.ValueOf(e).Elem().Field(fieldIndex + 1)
 }
 
 // —————————————————————————————————————————————————————————
